@@ -1,0 +1,146 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Central Laboratory Digital Twin</title><link rel="stylesheet" href="styles.css"></head><body>
+<div class="app">
+
+<header class="pro-header">
+  <div class="ut-brand">
+    <div class="ut-logo-mark official-logo" aria-label="University of Tabuk">
+      <img src="assets/ut_official_logo.png" alt="شعار جامعة تبوك الرسمي">
+    </div>
+    <div>
+      <strong>جامعة تبوك</strong>
+      <span>University of Tabuk</span>
+    </div>
+  </div>
+
+  <div class="header-center">
+    <div class="eyebrow">DIGITAL TWIN · RESEARCH INFRASTRUCTURE</div>
+    <h1>المعمل المركزي</h1>
+    <p>Central Laboratory</p>
+    <div class="creator-name">By&nbsp; Dr. kalel Alsaeed</div>
+    <small>للأبحاث والخدمات التحليلية · For Research and Analytical Services</small>
+  </div>
+
+  <div class="header-right">
+    <div class="twin-badge"><i></i><span>Digital Twin</span><b>LIVE MODEL</b></div>
+    <div class="version">v3.0</div>
+  </div>
+</header>
+
+
+<div class="toolbar pro-toolbar">
+  <div class="nav-group">
+    <button class="navbtn active"><span class="nav-icon">⌂</span><span>الرئيسية</span></button>
+    <button class="navbtn mapnav active-soft"><span class="nav-icon">▦</span><span>Digital Twin</span></button>
+    <button class="navbtn" id="orgPlanBtn"><span class="nav-icon">⌘</span><span>المخططات التنظيمية</span></button>
+  </div>
+  <div class="view-group">
+    <button class="btn active" data-floor="g">الطابق الأرضي</button>
+    <button class="btn" data-floor="f">الطابق الأول</button>
+    <button class="btn viewmode" id="view3d">3D</button>
+    <button class="btn" id="editBtn">وضع التعديل</button>
+  </div>
+  <div class="search-wrap"><span>⌕</span><input id="search" placeholder="ابحث عن معمل أو جهاز..."></div>
+</div>
+<main class="main-shell">
+<aside class="left-rail card">
+  <div class="rail-title">الطوابق<br><small>Floors</small></div>
+  <button class="rail-btn active" data-rail-floor="g"><span>▦</span><b>الطابق الأرضي</b><small>Ground Floor</small></button>
+  <button class="rail-btn" data-rail-floor="f"><span>▧</span><b>الطابق الأول</b><small>First Floor</small></button>
+  <div class="rail-sep"></div>
+  <div class="rail-title">العرض<br><small>View</small></div>
+  <button class="rail-btn compact" id="rail3d"><span>⬡</span><b>عرض ثلاثي الأبعاد</b><small>3D View</small></button>
+  <button class="rail-btn compact" id="rail2d"><span>▤</span><b>العرض ثنائي الأبعاد</b><small>2D View</small></button>
+  <div class="rail-sep"></div>
+  <div class="rail-title">طبقات البيانات<br><small>Data Layers</small></div>
+  <label class="switch-row"><span>الأجهزة</span><input type="checkbox" checked data-switch="equipment"><i></i></label>
+  <label class="switch-row"><span>الكهرباء</span><input type="checkbox" data-switch="power"><i></i></label>
+  <label class="switch-row"><span>التكييف</span><input type="checkbox" data-switch="hvac"><i></i></label>
+  <label class="switch-row"><span>الغازات</span><input type="checkbox" data-switch="gases"><i></i></label>
+  <label class="switch-row"><span>المياه</span><input type="checkbox" data-switch="water"><i></i></label>
+  <label class="switch-row"><span>السلامة</span><input type="checkbox" data-switch="safety"><i></i></label>
+</aside>
+
+<section class="map card">
+<div class="maphead"><div><div class="section-kicker">INTERACTIVE FACILITY MAP</div><h2>المخطط التشغيلي التفاعلي</h2><small>اضغط على أي معمل لعرض الأجهزة والمتطلبات وطريقة التشغيل</small></div><div><button id="zi">+</button><button id="zo">−</button><button id="zr">↺</button></div></div>
+<div class="map-controlbar">
+      <div class="layer-title">طبقات البيانات</div>
+      <button class="layer active" data-layer="equipment">الأجهزة</button>
+      <button class="layer" data-layer="power">الكهرباء</button>
+      <button class="layer" data-layer="hvac">التكييف</button>
+      <button class="layer" data-layer="gases">الغازات</button>
+      <button class="layer" data-layer="water">المياه</button>
+      <button class="layer" data-layer="safety">السلامة</button>
+    </div>
+    <div class="viewport">
+<div class="floating-map-ui">
+      <div class="compass"><span>▲</span><b>N</b></div>
+      <div class="zoom-caption">Interactive Facility Model</div>
+    </div>
+    <div class="main-entry top-entry">المدخل الرئيسي<br><small>Main Entrance</small></div>
+<div id="ground" class="floor">
+<button class="lab micro" data-lab="micro"><div class="lab-top"><span class="labicon">🔬</span><span class="num">01</span></div><b>معمل الميكروسكوبي</b><small>Microscopy Laboratory</small><em>TEM · SEM · AFM/STM</em></button>
+<div class="open"><div class="open-visual"><img src="assets/open_research_area.jpg" alt="منطقة الأبحاث المفتوحة"></div><div class="open-title"><b></b><small>Open Research Area</small></div></div>
+<button class="lab char" data-lab="char"><div class="lab-top"><span class="labicon">🧱</span><span class="num">03</span></div><b>معمل توصيف المواد</b><small>Materials Characterization</small><em>XRD · TGA/DSC · XRF</em></button>
+<button class="lab prep" data-lab="prep"><div class="lab-top"><span class="labicon">🧪</span><span class="num">02</span></div><b>معمل تحضير العينات</b><small>Sample Preparation</small><em>Cryostat · Ultrasonic</em></button>
+<button class="lab spec" data-lab="spec"><div class="lab-top"><span class="labicon">🌈</span><span class="num">04</span></div><b>معمل المطيافية</b><small>Spectroscopy</small><em>Raman · NMR · FTIR</em></button>
+<button class="lab element" data-lab="element"><div class="lab-top"><span class="labicon">⚛️</span><span class="num">05</span></div><b>التحليل العنصري</b><small>Elemental Analysis</small><em>ICP/MS · CHN</em></button>
+<button class="lab advanced" data-lab="advanced"><div class="lab-top"><span class="labicon">📈</span><span class="num">06</span></div><b>التحليل المتقدم</b><small>Advanced Analytical</small><em>UPLC/MS/MS · GC/MS/MS</em></button>
+<button class="lab chem wide" data-lab="chem"><div class="lab-top"><span class="labicon">⚗️</span><span class="num">07</span></div><b>الكيمياء والمواد</b><small>Chemistry & Materials</small><em>DMA · Potentiostat · Mastersizer</em></button>
+<button class="lab bio wide" data-lab="bio"><div class="lab-top"><span class="labicon">🧬</span><span class="num">08</span></div><b>الأحياء الجزيئية والحيوية</b><small>Molecular & Biochemical</small><em>qPCR · Flow Cytometer · BSC</em></button>
+<div class="services"><div>مخزن</div><div>Electrical</div><div>Mechanical</div><div>Reception</div><div>Manager</div><div>Meeting</div></div>
+</div>
+<div id="first" class="floor first hidden">
+<button class="lab mass" data-lab="mass"><div class="lab-top"><span class="labicon">🧫</span><span class="num">09</span></div><b>الكروماتوغرافيا والطيف الكتلي</b><small>Chromatography & Mass Spectrometry</small></button>
+<button class="lab thermal" data-lab="thermal"><div class="lab-top"><span class="labicon">🔥</span><span class="num">10</span></div><b>التحليل الحراري والسطحي</b><small>Thermal & Surface Analysis</small></button>
+<button class="lab electro" data-lab="electro"><div class="lab-top"><span class="labicon">⚡</span><span class="num">11</span></div><b>القياسات الكهروكيميائية</b><small>Electrochemical Measurements</small></button>
+<button class="lab cell" data-lab="cell"><div class="lab-top"><span class="labicon">🧫</span><span class="num">12</span></div><b>زراعة الخلايا</b><small>Cell Biology</small></button>
+<button class="lab apps" data-lab="apps"><div class="lab-top"><span class="labicon">🧩</span><span class="num">13</span></div><b>التطبيقات المتقدمة</b><small>Advanced Applications</small></button>
+<div class="room">Multi-Function Room</div><div class="room">PhD Students / Offices</div>
+</div>
+<div class="main-entry bottom-entry">المدخل الرئيسي<br><small>Main Entrance</small></div>
+</div>
+<div id="infra" class="infra hidden"><div>⚡<b>Power / UPS</b></div><div>❄<b>HVAC</b></div><div>◉<b>Special Gases</b></div><div>💧<b>Pure Water</b></div><div>⌁<b>Fume Hoods</b></div><div>🛡<b>Safety</b></div><div>♻<b>Waste</b></div></div>
+<div class="kpi-strip">
+          <div><span>13</span><b>معمل</b><small>Laboratories</small></div>
+          <div><span>86</span><b>جهاز</b><small>Instruments</small></div>
+          <div><span>24/7</span><b>دعم فني</b><small>Technical Support</small></div>
+          <div><span>7</span><b>أنظمة بنية تحتية</b><small>Core Utilities</small></div>
+        </div>
+        </section>
+<aside class="side card"><div class="sidehead"><div class="eyebrow dark">SELECTED LABORATORY</div><h2 id="title"></h2><small id="english"></small></div>
+<div class="tabs"><button class="tab active" data-tab="equipment">الأجهزة</button><button class="tab" data-tab="operation">طريقة التشغيل</button><button class="tab" data-tab="requirements">المتطلبات</button><button class="tab" data-tab="safety">السلامة</button></div>
+<div class="body"><section id="equipmentTab">
+      <div class="panel-section-title"><span>قائمة الأجهزة</span><small>Instrument List</small></div><div class="device-visual"><div class="device-photo" id="devicePhoto">🔬</div><div><div class="device-label">SELECTED INSTRUMENT</div><div id="deviceNameHero" class="device-name-hero">TEM</div></div></div><div id="equipment" class="eqgrid"></div><div id="detail" class="detail"></div></section><section id="operationTab" class="hidden"><ol id="operation"></ol></section><section id="requirementsTab" class="hidden"><div id="requirements" class="reqlist"></div></section><section id="safetyTab" class="hidden"><div class="reqlist"><div>تقييم المخاطر قبل التشغيل.</div><div>السماح للمستخدمين المخولين فقط.</div><div>توثيق الأعطال وعدم المطابقة.</div><div>إدارة النفايات حسب طبيعتها.</div><div>توثيق الصيانة والمعايرة.</div></div></section>
+<section id="editBox" class="edit hidden"><h3>تعديل بيانات المعمل</h3><label>اسم المعمل</label><input id="editName"><label>الاسم الإنجليزي</label><input id="editEnglish"><label>لون المعمل</label><input id="editColor" type="color"><label>الأجهزة (جهاز في كل سطر)</label><textarea id="editEquipment" rows="7"></textarea><div class="actions"><button id="save" class="primary">حفظ التعديل</button><button id="export" class="btn">تصدير JSON</button><label class="btn file">استيراد JSON<input id="importFile" type="file" accept=".json"></label><button id="reset" class="danger">استعادة الأصل</button></div></section></div></aside>
+</main>
+<div id="orgPlanModal" class="org-modal hidden">
+  <div class="org-dialog">
+    <div class="org-dialog-head">
+      <div>
+        <div class="eyebrow dark">ORGANIZATIONAL FLOOR PLANS</div>
+        <h2>المخططات التنظيمية للمعمل المركزي</h2>
+        <p>Central Laboratory Floor Plans</p>
+      </div>
+      <button id="closeOrg" class="org-close">×</button>
+    </div>
+
+    <div class="org-stage single-plan-stage">
+      <div class="org-image single-plan-image">
+        <img src="assets/modified_plan.png" alt="المخطط المعدل للمعمل المركزي">
+        <a class="org-open" href="assets/modified_plan.png" target="_blank">فتح بالحجم الكامل</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</div>
+
+<footer class="pro-footer">
+  <div>جامعة تبوك · University of Tabuk</div>
+  <div>المعمل المركزي · Digital Twin</div>
+  <div>Knowledge · Innovation · Sustainable Research Infrastructure</div>
+</footer>
+</div>
+<script>window.__LAB_DATA__={"micro": {"number": "01", "ar": "معمل الميكروسكوبي", "en": "Microscopy Laboratory", "bg": "#EAF3FF", "border": "#8FB9E8", "equipment": ["TEM", "SEM 1", "SEM 2", "AFM/STM", "Confocal Microscope", "Fluorescent Microscope", "Slide Scanner"], "requirements": ["عزل الاهتزاز للأجهزة الحساسة", "تحكم دقيق بدرجة الحرارة والرطوبة", "UPS وتأريض مناسب"], "operation": ["التحقق من جاهزية الجهاز", "تأكيد ظروف البيئة والطاقة", "تحضير العينة حسب الإجراء المعتمد", "التشغيل بواسطة مستخدم مخول", "حفظ البيانات وتوثيق الاستخدام", "تنظيف الجهاز وتسجيل نهاية الجلسة"]}, "prep": {"number": "02", "ar": "معمل تحضير العينات", "en": "Sample Preparation Laboratory", "bg": "#EEF7FF", "border": "#9EC4E8", "equipment": ["Electron Microscope Sample Prep Suite", "Cryostat", "Ultrasonic"], "requirements": ["تهوية وشفط مناسب", "فصل مناطق تحضير العينات", "تخزين آمن للمواد"], "operation": ["استلام العينة وترميزها", "اختيار طريقة التحضير", "تحضير العينة", "توثيق المواد المستخدمة", "نقل العينة للمعمل المختص"]}, "char": {"number": "03", "ar": "معمل توصيف المواد", "en": "Materials Characterization Laboratory", "bg": "#ECF8EF", "border": "#9ACAA7", "equipment": ["XRD 1", "XRD 2", "TGA/DSC", "XRF", "Surface Area & Pore Size Analyzer", "Crystal Size Analyzer"], "requirements": ["طاقة مستقرة", "تحكم بيئي", "معايرة وصيانة دورية"], "operation": ["تأكيد هوية العينة", "اختيار طريقة القياس", "تشغيل QC", "تحليل العينة", "مراجعة النتيجة", "أرشفة البيانات"]}, "spec": {"number": "04", "ar": "معمل المطيافية", "en": "Spectroscopy Laboratory", "bg": "#FFF1F1", "border": "#E4A6A6", "equipment": ["Raman", "NMR", "FTIR", "UV-Vis-IR", "Thermo-Nanodrop 8000", "Atomic Absorption Spectrometer"], "requirements": ["تحكم دقيق في HVAC", "غازات حسب متطلبات الجهاز", "UPS وتأريض"], "operation": ["اختيار التقنية المناسبة", "تهيئة الجهاز", "تشغيل Blank/Reference", "قياس العينة", "مراجعة الطيف", "حفظ النتائج"]}, "element": {"number": "05", "ar": "معمل التحليل العنصري", "en": "Elemental Analysis Laboratory", "bg": "#E9F8F8", "border": "#8CC9CA", "equipment": ["ICP/MS", "Elemental Analyzer (CHN)", "Zetasizer"], "requirements": ["غازات عالية النقاوة", "مياه منقاة", "شفط موضعي"], "operation": ["تحضير المعايير", "معايرة الجهاز", "تشغيل QC", "تحليل العينات", "مراجعة النتائج"]}, "advanced": {"number": "06", "ar": "معمل التحليل المتقدم", "en": "Advanced Analytical Laboratory", "bg": "#F3EEFF", "border": "#B9A7E7", "equipment": ["UPLC/MS/MS", "GC/MS/MS", "LC/MS/MS", "GPC", "DMA"], "requirements": ["غازات عالية النقاوة", "UPS", "تحكم بيئي"], "operation": ["اختيار الطريقة", "System Suitability", "Calibration", "Sample Run", "QC Review", "Data Archive"]}, "chem": {"number": "07", "ar": "معمل الكيمياء والمواد", "en": "Chemistry & Materials Laboratory", "bg": "#FFF7E9", "border": "#DCC08A", "equipment": ["Autochem Analyzer", "Potentiostat/Galvanostat", "Mastersizer", "Viscometer", "Ovens"], "requirements": ["Fume Hood حسب الاستخدام", "تخزين كيميائي آمن", "إدارة النفايات"], "operation": ["مراجعة خطة العمل", "فحص المواد", "تشغيل الأجهزة", "توثيق ظروف التشغيل", "إدارة المخلفات"]}, "bio": {"number": "08", "ar": "معمل الأحياء الجزيئية والحيوية", "en": "Molecular & Biochemical Laboratory", "bg": "#EAF8F1", "border": "#96C9AF", "equipment": ["Real-time PCR", "Flow Cytometer", "ELISA Reader", "Gel Electrophoresis", "Gel Doc", "CO₂ Incubator", "Biosafety Cabinet"], "requirements": ["منع التلوث", "Biosafety Cabinet", "مياه منقاة", "تخزين بارد مناسب"], "operation": ["تجهيز وتعقيم منطقة العمل", "تحضير العينات", "تشغيل الضوابط", "تحليل النتائج", "حفظ البيانات", "التخلص الآمن من النفايات"]}, "mass": {"number": "09", "ar": "معمل الكروماتوغرافيا والطيف الكتلي", "en": "Chromatography & Mass Spectrometry", "bg": "#EEF5FA", "border": "#9FBBD0", "equipment": ["LC/MS/MS", "HPLC/MS", "GC/MS/MS"], "requirements": ["غازات عالية النقاوة", "UPS", "تهوية مناسبة"], "operation": ["Method Setup", "Calibration", "QC", "Sample Analysis", "Review", "Archive"]}, "thermal": {"number": "10", "ar": "معمل التحليل الحراري والسطحي", "en": "Thermal & Surface Analysis", "bg": "#FFF4E8", "border": "#D8B27E", "equipment": ["TGA/DSC", "Surface Area Analyzer", "XRF"], "requirements": ["HVAC", "غازات حسب الجهاز", "معايرة دورية"], "operation": ["Sample Prep", "Baseline Check", "Analysis", "Review", "Archive"]}, "electro": {"number": "11", "ar": "معمل القياسات الكهروكيميائية", "en": "Electrochemical Measurements", "bg": "#E9F6F8", "border": "#94C5CE", "equipment": ["Potentiostat/Galvanostat", "TDS Meter"], "requirements": ["تأريض", "طاقة مستقرة", "سلامة كهربائية"], "operation": ["Cell Setup", "Calibration", "Measurement", "Review", "Cleaning"]}, "cell": {"number": "12", "ar": "معمل زراعة الخلايا", "en": "Cell Biology Laboratory", "bg": "#EEF9F0", "border": "#A4CEAA", "equipment": ["CO₂ Incubator", "Biosafety Cabinet", "Inverted Microscope"], "requirements": ["منع التلوث", "CO₂", "سلامة حيوية"], "operation": ["تعقيم منطقة العمل", "فحص البيئة", "زراعة الخلايا", "المراقبة", "التوثيق"]}, "apps": {"number": "13", "ar": "معمل التطبيقات المتقدمة", "en": "Advanced Applications Laboratory", "bg": "#F6F1FB", "border": "#C6B2DA", "equipment": ["Rapid Prototyping Machine", "Dynamic Mechanical Analyzer"], "requirements": ["طاقة مناسبة", "تهوية", "صيانة وقائية"], "operation": ["Setup", "Safety Check", "Run", "Inspection", "Documentation"]}};</script><script src="app.js"></script></body></html>

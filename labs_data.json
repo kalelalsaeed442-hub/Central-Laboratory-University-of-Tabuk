@@ -1,0 +1,337 @@
+{
+  "micro": {
+    "number": "01",
+    "ar": "معمل الميكروسكوبي",
+    "en": "Microscopy Laboratory",
+    "bg": "#EAF3FF",
+    "border": "#8FB9E8",
+    "equipment": [
+      "TEM",
+      "SEM 1",
+      "SEM 2",
+      "AFM/STM",
+      "Confocal Microscope",
+      "Fluorescent Microscope",
+      "Slide Scanner"
+    ],
+    "requirements": [
+      "عزل الاهتزاز للأجهزة الحساسة",
+      "تحكم دقيق بدرجة الحرارة والرطوبة",
+      "UPS وتأريض مناسب"
+    ],
+    "operation": [
+      "التحقق من جاهزية الجهاز",
+      "تأكيد ظروف البيئة والطاقة",
+      "تحضير العينة حسب الإجراء المعتمد",
+      "التشغيل بواسطة مستخدم مخول",
+      "حفظ البيانات وتوثيق الاستخدام",
+      "تنظيف الجهاز وتسجيل نهاية الجلسة"
+    ]
+  },
+  "prep": {
+    "number": "02",
+    "ar": "معمل تحضير العينات",
+    "en": "Sample Preparation Laboratory",
+    "bg": "#EEF7FF",
+    "border": "#9EC4E8",
+    "equipment": [
+      "Electron Microscope Sample Prep Suite",
+      "Cryostat",
+      "Ultrasonic"
+    ],
+    "requirements": [
+      "تهوية وشفط مناسب",
+      "فصل مناطق تحضير العينات",
+      "تخزين آمن للمواد"
+    ],
+    "operation": [
+      "استلام العينة وترميزها",
+      "اختيار طريقة التحضير",
+      "تحضير العينة",
+      "توثيق المواد المستخدمة",
+      "نقل العينة للمعمل المختص"
+    ]
+  },
+  "char": {
+    "number": "03",
+    "ar": "معمل توصيف المواد",
+    "en": "Materials Characterization Laboratory",
+    "bg": "#ECF8EF",
+    "border": "#9ACAA7",
+    "equipment": [
+      "XRD 1",
+      "XRD 2",
+      "TGA/DSC",
+      "XRF",
+      "Surface Area & Pore Size Analyzer",
+      "Crystal Size Analyzer"
+    ],
+    "requirements": [
+      "طاقة مستقرة",
+      "تحكم بيئي",
+      "معايرة وصيانة دورية"
+    ],
+    "operation": [
+      "تأكيد هوية العينة",
+      "اختيار طريقة القياس",
+      "تشغيل QC",
+      "تحليل العينة",
+      "مراجعة النتيجة",
+      "أرشفة البيانات"
+    ]
+  },
+  "spec": {
+    "number": "04",
+    "ar": "معمل المطيافية",
+    "en": "Spectroscopy Laboratory",
+    "bg": "#FFF1F1",
+    "border": "#E4A6A6",
+    "equipment": [
+      "Raman",
+      "NMR",
+      "FTIR",
+      "UV-Vis-IR",
+      "Thermo-Nanodrop 8000",
+      "Atomic Absorption Spectrometer"
+    ],
+    "requirements": [
+      "تحكم دقيق في HVAC",
+      "غازات حسب متطلبات الجهاز",
+      "UPS وتأريض"
+    ],
+    "operation": [
+      "اختيار التقنية المناسبة",
+      "تهيئة الجهاز",
+      "تشغيل Blank/Reference",
+      "قياس العينة",
+      "مراجعة الطيف",
+      "حفظ النتائج"
+    ]
+  },
+  "element": {
+    "number": "05",
+    "ar": "معمل التحليل العنصري",
+    "en": "Elemental Analysis Laboratory",
+    "bg": "#E9F8F8",
+    "border": "#8CC9CA",
+    "equipment": [
+      "ICP/MS",
+      "Elemental Analyzer (CHN)",
+      "Zetasizer"
+    ],
+    "requirements": [
+      "غازات عالية النقاوة",
+      "مياه منقاة",
+      "شفط موضعي"
+    ],
+    "operation": [
+      "تحضير المعايير",
+      "معايرة الجهاز",
+      "تشغيل QC",
+      "تحليل العينات",
+      "مراجعة النتائج"
+    ]
+  },
+  "advanced": {
+    "number": "06",
+    "ar": "معمل التحليل المتقدم",
+    "en": "Advanced Analytical Laboratory",
+    "bg": "#F3EEFF",
+    "border": "#B9A7E7",
+    "equipment": [
+      "UPLC/MS/MS",
+      "GC/MS/MS",
+      "LC/MS/MS",
+      "GPC",
+      "DMA"
+    ],
+    "requirements": [
+      "غازات عالية النقاوة",
+      "UPS",
+      "تحكم بيئي"
+    ],
+    "operation": [
+      "اختيار الطريقة",
+      "System Suitability",
+      "Calibration",
+      "Sample Run",
+      "QC Review",
+      "Data Archive"
+    ]
+  },
+  "chem": {
+    "number": "07",
+    "ar": "معمل الكيمياء والمواد",
+    "en": "Chemistry & Materials Laboratory",
+    "bg": "#FFF7E9",
+    "border": "#DCC08A",
+    "equipment": [
+      "Autochem Analyzer",
+      "Potentiostat/Galvanostat",
+      "Mastersizer",
+      "Viscometer",
+      "Ovens"
+    ],
+    "requirements": [
+      "Fume Hood حسب الاستخدام",
+      "تخزين كيميائي آمن",
+      "إدارة النفايات"
+    ],
+    "operation": [
+      "مراجعة خطة العمل",
+      "فحص المواد",
+      "تشغيل الأجهزة",
+      "توثيق ظروف التشغيل",
+      "إدارة المخلفات"
+    ]
+  },
+  "bio": {
+    "number": "08",
+    "ar": "معمل الأحياء الجزيئية والحيوية",
+    "en": "Molecular & Biochemical Laboratory",
+    "bg": "#EAF8F1",
+    "border": "#96C9AF",
+    "equipment": [
+      "Real-time PCR",
+      "Flow Cytometer",
+      "ELISA Reader",
+      "Gel Electrophoresis",
+      "Gel Doc",
+      "CO₂ Incubator",
+      "Biosafety Cabinet"
+    ],
+    "requirements": [
+      "منع التلوث",
+      "Biosafety Cabinet",
+      "مياه منقاة",
+      "تخزين بارد مناسب"
+    ],
+    "operation": [
+      "تجهيز وتعقيم منطقة العمل",
+      "تحضير العينات",
+      "تشغيل الضوابط",
+      "تحليل النتائج",
+      "حفظ البيانات",
+      "التخلص الآمن من النفايات"
+    ]
+  },
+  "mass": {
+    "number": "09",
+    "ar": "معمل الكروماتوغرافيا والطيف الكتلي",
+    "en": "Chromatography & Mass Spectrometry",
+    "bg": "#EEF5FA",
+    "border": "#9FBBD0",
+    "equipment": [
+      "LC/MS/MS",
+      "HPLC/MS",
+      "GC/MS/MS"
+    ],
+    "requirements": [
+      "غازات عالية النقاوة",
+      "UPS",
+      "تهوية مناسبة"
+    ],
+    "operation": [
+      "Method Setup",
+      "Calibration",
+      "QC",
+      "Sample Analysis",
+      "Review",
+      "Archive"
+    ]
+  },
+  "thermal": {
+    "number": "10",
+    "ar": "معمل التحليل الحراري والسطحي",
+    "en": "Thermal & Surface Analysis",
+    "bg": "#FFF4E8",
+    "border": "#D8B27E",
+    "equipment": [
+      "TGA/DSC",
+      "Surface Area Analyzer",
+      "XRF"
+    ],
+    "requirements": [
+      "HVAC",
+      "غازات حسب الجهاز",
+      "معايرة دورية"
+    ],
+    "operation": [
+      "Sample Prep",
+      "Baseline Check",
+      "Analysis",
+      "Review",
+      "Archive"
+    ]
+  },
+  "electro": {
+    "number": "11",
+    "ar": "معمل القياسات الكهروكيميائية",
+    "en": "Electrochemical Measurements",
+    "bg": "#E9F6F8",
+    "border": "#94C5CE",
+    "equipment": [
+      "Potentiostat/Galvanostat",
+      "TDS Meter"
+    ],
+    "requirements": [
+      "تأريض",
+      "طاقة مستقرة",
+      "سلامة كهربائية"
+    ],
+    "operation": [
+      "Cell Setup",
+      "Calibration",
+      "Measurement",
+      "Review",
+      "Cleaning"
+    ]
+  },
+  "cell": {
+    "number": "12",
+    "ar": "معمل زراعة الخلايا",
+    "en": "Cell Biology Laboratory",
+    "bg": "#EEF9F0",
+    "border": "#A4CEAA",
+    "equipment": [
+      "CO₂ Incubator",
+      "Biosafety Cabinet",
+      "Inverted Microscope"
+    ],
+    "requirements": [
+      "منع التلوث",
+      "CO₂",
+      "سلامة حيوية"
+    ],
+    "operation": [
+      "تعقيم منطقة العمل",
+      "فحص البيئة",
+      "زراعة الخلايا",
+      "المراقبة",
+      "التوثيق"
+    ]
+  },
+  "apps": {
+    "number": "13",
+    "ar": "معمل التطبيقات المتقدمة",
+    "en": "Advanced Applications Laboratory",
+    "bg": "#F6F1FB",
+    "border": "#C6B2DA",
+    "equipment": [
+      "Rapid Prototyping Machine",
+      "Dynamic Mechanical Analyzer"
+    ],
+    "requirements": [
+      "طاقة مناسبة",
+      "تهوية",
+      "صيانة وقائية"
+    ],
+    "operation": [
+      "Setup",
+      "Safety Check",
+      "Run",
+      "Inspection",
+      "Documentation"
+    ]
+  }
+}

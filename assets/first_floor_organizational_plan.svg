@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#eaf2f7"/><stop offset="1" stop-color="#f7fafc"/>
+  </linearGradient>
+  <linearGradient id="head" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#051f35"/><stop offset="1" stop-color="#0c527d"/>
+  </linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+    <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#062138" flood-opacity=".16"/>
+  </filter>
+  <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+    <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#b9c8d2" stroke-opacity=".22" stroke-width="1"/>
+  </pattern>
+</defs>
+<rect width="1600" height="1000" fill="url(#bg)"/>
+<rect width="1600" height="1000" fill="url(#grid)"/>
+<rect x="0" y="0" width="1600" height="120" fill="url(#head)"/>
+<rect x="0" y="116" width="1600" height="4" fill="#c8a45a"/>
+<text x="80" y="54" fill="#ffffff" font-family="Segoe UI,Arial" font-size="34" font-weight="700">Central Laboratory</text>
+<text x="1520" y="52" text-anchor="end" fill="#ffffff" font-family="Tahoma,Arial" font-size="34" font-weight="700">المعمل المركزي</text>
+<text x="1520" y="88" text-anchor="end" fill="#d8e6ee" font-family="Tahoma,Arial" font-size="18">الطابق الأول · First Floor</text>
+<g transform="translate(70,160)" filter="url(#shadow)">
+  <rect width="1460" height="760" rx="22" fill="#ffffff" stroke="#8ea5b5" stroke-width="3"/>
+  <rect x="18" y="18" width="1424" height="724" rx="16" fill="#f3f7f9" stroke="#d6e0e6"/>
+<g>
+<rect x="40" y="80" width="360" height="180" rx="14" fill="#EEF5FA" stroke="#6f8797" stroke-width="2"/>
+<rect x="40" y="80" width="360" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="76" cy="122" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="76" y="129" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">▥</text>
+<text x="378" y="128" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">09  الكروماتوغرافيا والطيف الكتلي</text>
+<text x="378" y="156" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Chromatography & Mass Spectrometry</text>
+</g><g>
+<rect x="430" y="80" width="330" height="180" rx="14" fill="#FFF4E8" stroke="#6f8797" stroke-width="2"/>
+<rect x="430" y="80" width="330" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="466" cy="122" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="466" y="129" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">♨</text>
+<text x="738" y="128" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">10  التحليل الحراري والسطحي</text>
+<text x="738" y="156" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Thermal & Surface Analysis</text>
+</g><g>
+<rect x="790" y="80" width="300" height="180" rx="14" fill="#E9F6F8" stroke="#6f8797" stroke-width="2"/>
+<rect x="790" y="80" width="300" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="826" cy="122" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="826" y="129" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">⚡</text>
+<text x="1068" y="128" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">11  القياسات الكهروكيميائية</text>
+<text x="1068" y="156" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Electrochemical Measurements</text>
+</g><g>
+<rect x="1120" y="80" width="300" height="180" rx="14" fill="#EEF9F0" stroke="#6f8797" stroke-width="2"/>
+<rect x="1120" y="80" width="300" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="1156" cy="122" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="1156" y="129" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">⌬</text>
+<text x="1398" y="128" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">12  زراعة الخلايا</text>
+<text x="1398" y="156" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Cell Biology Laboratory</text>
+</g><g>
+<rect x="40" y="300" width="430" height="180" rx="14" fill="#F6F1FB" stroke="#6f8797" stroke-width="2"/>
+<rect x="40" y="300" width="430" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="76" cy="342" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="76" y="349" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">◇</text>
+<text x="448" y="348" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">13  التطبيقات المتقدمة</text>
+<text x="448" y="376" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Advanced Applications</text>
+</g><g>
+<rect x="500" y="300" width="430" height="180" rx="14" fill="#F7FAFC" stroke="#6f8797" stroke-width="2"/>
+<rect x="500" y="300" width="430" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="536" cy="342" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="536" y="349" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">▦</text>
+<text x="908" y="348" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">قاعة متعددة الاستخدامات</text>
+<text x="908" y="376" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Multi-Function Room</text>
+</g><g>
+<rect x="960" y="300" width="460" height="180" rx="14" fill="#F7FAFC" stroke="#6f8797" stroke-width="2"/>
+<rect x="960" y="300" width="460" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="996" cy="342" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="996" y="349" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">▣</text>
+<text x="1398" y="348" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">مكاتب الباحثين وطلاب الدكتوراه</text>
+<text x="1398" y="376" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Researcher & PhD Offices</text>
+</g><g>
+<rect x="40" y="520" width="280" height="120" rx="14" fill="#F2F4F6" stroke="#6f8797" stroke-width="2"/>
+<rect x="40" y="520" width="280" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="76" cy="562" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="76" y="569" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">□</text>
+<text x="298" y="568" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">المخزن</text>
+<text x="298" y="596" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Store</text>
+</g><g>
+<rect x="350" y="520" width="280" height="120" rx="14" fill="#F2F4F6" stroke="#6f8797" stroke-width="2"/>
+<rect x="350" y="520" width="280" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="386" cy="562" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="386" y="569" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">↕</text>
+<text x="608" y="568" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">المصاعد</text>
+<text x="608" y="596" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Elevators</text>
+</g><g>
+<rect x="660" y="520" width="360" height="120" rx="14" fill="#F7FAFC" stroke="#6f8797" stroke-width="2"/>
+<rect x="660" y="520" width="360" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="696" cy="562" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="696" y="569" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">▤</text>
+<text x="998" y="568" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">مكاتب</text>
+<text x="998" y="596" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Offices</text>
+</g><g>
+<rect x="1050" y="520" width="370" height="120" rx="14" fill="#F2F4F6" stroke="#6f8797" stroke-width="2"/>
+<rect x="1050" y="520" width="370" height="12" rx="8" fill="#c8a45a" opacity=".85"/>
+<circle cx="1086" cy="562" r="20" fill="#ffffff" stroke="#91a5b2"/>
+<text x="1086" y="569" text-anchor="middle" font-size="24" font-family="Segoe UI Symbol,Arial">◉</text>
+<text x="1398" y="568" text-anchor="end" fill="#111" font-family="Tahoma,Arial" font-size="20" font-weight="700">خدمات مساندة</text>
+<text x="1398" y="596" text-anchor="end" fill="#314957" font-family="Segoe UI,Arial" font-size="14">Support Services</text>
+</g>
+  <g>
+    <rect x="600" y="0" width="260" height="46" rx="8" fill="#ffffff" stroke="#8fa2af"/>
+    <text x="730" y="20" text-anchor="middle" font-size="15" font-family="Tahoma,Arial" font-weight="700">المدخل الرئيسي</text>
+    <text x="730" y="38" text-anchor="middle" font-size="11" font-family="Segoe UI,Arial">Main Entrance</text>
+  </g>
+  <g>
+    <rect x="600" y="714" width="260" height="46" rx="8" fill="#ffffff" stroke="#8fa2af"/>
+    <text x="730" y="734" text-anchor="middle" font-size="15" font-family="Tahoma,Arial" font-weight="700">المدخل الرئيسي</text>
+    <text x="730" y="752" text-anchor="middle" font-size="11" font-family="Segoe UI,Arial">Main Entrance</text>
+  </g>
+</g>
+<g transform="translate(70,944)">
+  <circle cx="10" cy="0" r="6" fill="#19b89c"/><text x="24" y="5" font-size="14" font-family="Segoe UI,Arial" fill="#263b48">Research Labs</text>
+  <circle cx="180" cy="0" r="6" fill="#c8a45a"/><text x="194" y="5" font-size="14" font-family="Segoe UI,Arial" fill="#263b48">Support & Services</text>
+  <text x="1460" y="5" text-anchor="end" font-size="14" font-family="Segoe UI,Arial" fill="#526b7a">Central Laboratory · University of Tabuk · Digital Twin</text>
+</g>
+</svg>
