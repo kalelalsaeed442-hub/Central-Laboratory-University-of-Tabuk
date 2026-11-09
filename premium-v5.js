@@ -1,0 +1,5 @@
+(()=>{const toast=document.createElement('div');toast.className='v5-toast';toast.setAttribute('role','status');document.body.appendChild(toast);let timeout;function notify(message){toast.textContent=message;toast.classList.add('visible');clearTimeout(timeout);timeout=setTimeout(()=>toast.classList.remove('visible'),2700)}
+// Save confirmation only after existing handlers have persisted to localStorage.
+const labSave=document.getElementById('save');if(labSave)labSave.addEventListener('click',()=>{try{if(localStorage.getItem('centralLabsDigitalTwinData'))notify('✓ تم حفظ تعديلات المعمل في هذا المتصفح');else notify('تعذّر التحقق من حفظ التعديلات')}catch{notify('تعذّر الوصول إلى التخزين المحلي')}});
+const teamForm=document.getElementById('teamForm');if(teamForm)teamForm.addEventListener('submit',()=>{setTimeout(()=>{try{if(localStorage.getItem('centralLabTeamMembersV1'))notify('✓ تم حفظ بيانات فريق العمل بنجاح');else notify('تعذّر التحقق من حفظ الفريق')}catch{notify('تعذّر الوصول إلى التخزين المحلي')}},0)});
+})();

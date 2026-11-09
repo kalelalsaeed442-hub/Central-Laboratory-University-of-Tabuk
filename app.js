@@ -54,7 +54,7 @@ $$(".tab").forEach(btn=>btn.onclick=()=>{
   btn.classList.add("active");
   ["equipment","operation","requirements","safety"].forEach(t=>{const panel=$("#"+t+"Tab");if(panel) panel.classList.toggle("hidden",t!==btn.dataset.tab);});
 });
-$("#save").onclick=()=>{let d=data[current];d.ar=$("#editName").value.trim()||d.ar;d.en=$("#editEnglish").value.trim()||d.en;d.bg=$("#editColor").value;d.border=shade(d.bg,-18);d.equipment=$("#editEquipment").value.split("\n").map(x=>x.trim()).filter(Boolean);localStorage.setItem("centralLabsDigitalTwinData",JSON.stringify(data));colors();maplabels();render(current)};
+$("#save").onclick=()=>{let d=data[current];d.ar=$("#editName").value.trim()||d.ar;d.en=$("#editEnglish").value.trim()||d.en;d.bg=$("#editColor").value;d.border=shade(d.bg,-18);d.equipment=$("#editEquipment").value.split("\n").map(x=>x.trim()).filter(Boolean);window.centralLabSave("centralLabsDigitalTwinData",JSON.stringify(data),"حفظ بيانات المعمل");colors();maplabels();render(current)};
 function applyFloorView(){
   const target=activeFloor();
   if(!target) return;
@@ -64,8 +64,8 @@ function setZoom(z){zoom=Math.max(.72,Math.min(1.35,z));applyFloorView()}
 $("#zi").onclick=()=>setZoom(zoom+.08);$("#zo").onclick=()=>setZoom(zoom-.08);$("#zr").onclick=()=>setZoom(1);
 $("#search").oninput=e=>{let q=e.target.value.trim().toLowerCase();$$(".lab").forEach(el=>{let d=data[el.dataset.lab],hit=!q||d.ar.toLowerCase().includes(q)||d.en.toLowerCase().includes(q)||d.equipment.some(x=>x.toLowerCase().includes(q));el.style.opacity=hit?"1":".24"})};
 $("#export").onclick=()=>{let blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="central_research_labs_data.json";a.click();URL.revokeObjectURL(a.href)};
-$("#importFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{data=JSON.parse(r.result);localStorage.setItem("centralLabsDigitalTwinData",JSON.stringify(data));colors();maplabels();render(current)}catch{alert("ملف JSON غير صالح")}};r.readAsText(f)};
-$("#reset").onclick=()=>{if(confirm("استعادة جميع البيانات الأصلية؟")){data=JSON.parse(JSON.stringify(original));localStorage.removeItem("centralLabsDigitalTwinData");colors();maplabels();render("micro")}};
+$("#importFile").onchange=e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{data=JSON.parse(r.result);window.centralLabSave("centralLabsDigitalTwinData",JSON.stringify(data),"حفظ بيانات المعمل");colors();maplabels();render(current)}catch{alert("ملف JSON غير صالح")}};r.readAsText(f)};
+$("#reset").onclick=()=>{if(confirm("استعادة جميع البيانات الأصلية؟")){data=JSON.parse(JSON.stringify(original));window.centralLabRemove("centralLabsDigitalTwinData","استعادة الأصل");colors();maplabels();render("micro")}};
 
 function activeFloor(){return $("#ground").classList.contains("hidden")?$("#first"):$("#ground");}
 function set3D(on){

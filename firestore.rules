@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signedIn(){return request.auth != null;}
+  function isAdmin(){return signedIn() && request.auth.uid == 'zPzvmsBu9GTbQTc0njW62lOplr93';}
+  function editor(){return isAdmin() || (signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'editor');}
+  match /dashboard/{id} {
+   allow read: if id in ['labs','team'];
+   allow create: if editor() && id in ['labs','team'] && request.resource.data.keys().hasOnly(['value','revision','updatedAt','updatedBy','updatedByName']) && request.resource.data.updatedBy == request.auth.uid && request.resource.data.revision == 1;
+   allow update: if editor() && id in ['labs','team'] && request.resource.data.keys().hasOnly(['value','revision','updatedAt','updatedBy','updatedByName']) && request.resource.data.updatedBy == request.auth.uid && request.resource.data.revision == resource.data.revision + 1;
+   allow delete: if false;
+  }
+  match /users/{uid} {
+   allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+   allow create, update, delete: if isAdmin() && uid != 'zPzvmsBu9GTbQTc0njW62lOplr93';
+  }
+  match /auditLogs/{id} {
+   allow read: if isAdmin();
+   allow create: if editor() && request.resource.data.uid == request.auth.uid && request.resource.data.keys().hasOnly(['action','document','uid','name','email','at']);
+   allow update, delete: if false;
+  }
+ }
+}
