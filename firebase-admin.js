@@ -11,6 +11,7 @@
   };
 
   const ROOT = 'zPzvmsBu9GTbQTc0njW62lOplr93';
+
   const KEYS = {
     centralLabsDigitalTwinData: 'labs',
     centralLabTeamMembersV1: 'team'
@@ -66,12 +67,10 @@
   let user = null;
   let profile = null;
   let unsubs = [];
-  let busy = false;
   let authVersion = 0;
+  let loginInProgress = false;
 
   const WELCOME_KEY = 'centralLabWelcomeShown';
-  const RELOAD_KEY = 'centralLabSyncReload';
-  const RELOAD_COOLDOWN = 5000;
 
   const overlay = document.createElement('div');
   overlay.id = 'adminOverlay';
@@ -84,6 +83,7 @@
       '<section class="admin-panel" role="dialog" aria-modal="true">' +
       html +
       '</section>';
+
     overlay.style.display = 'flex';
   }
 
@@ -131,14 +131,13 @@
     });
   }
 
-  // Welcome appears once per authenticated tab session.
-  function welcome(force = false) {
+  // Welcome is displayed only after an explicit login.
+  function welcome() {
     if (!user) return;
 
     const welcomeId = user.uid;
 
     if (
-      !force &&
       sessionStorage.getItem(WELCOME_KEY) === welcomeId
     ) {
       return;
@@ -148,21 +147,45 @@
 
     show(`
       <h2>مرحبًا بك، ${esc(displayName())}</h2>
+
       <p class="admin-success">
         يسعدنا انضمامك إلى منظومة المعامل المركزية
         بجامعة تبوك. تم تسجيل دخولك بنجاح.
       </p>
+
       <p>
         الصلاحية:
-        ${admin() ? 'مدير النظام' : editor() ? 'محرر' : 'مشاهد'}
+        <b>
+          ${
+            admin()
+              ? 'مدير النظام'
+              : editor()
+                ? 'محرر'
+                : 'مشاهد'
+          }
+        </b>
       </p>
+
       <div class="admin-actions">
-        <button class="admin-primary" id="adminContinue">
+        <button
+          class="admin-primary"
+          id="adminContinue"
+          type="button"
+        >
           متابعة
         </button>
+
         ${
           admin()
-            ? '<button class="admin-muted" id="adminManage">إدارة النظام</button>'
+            ? `
+              <button
+                class="admin-muted"
+                id="adminManage"
+                type="button"
+              >
+                إدارة النظام
+              </button>
+            `
             : ''
         }
       </div>
@@ -178,26 +201,46 @@
   function login() {
     show(`
       <h2>🔐 تسجيل الدخول</h2>
-      <p>منظومة المعامل المركزية – جامعة تبوك</p>
+
+      <p>
+        منظومة المعامل المركزية – جامعة تبوك
+      </p>
+
       <form id="fbLogin">
         <label>البريد الإلكتروني</label>
+
         <input
           id="fbEmail"
           type="email"
           required
           autocomplete="username"
         >
+
         <label>كلمة المرور</label>
+
         <input
           id="fbPass"
           type="password"
           required
           autocomplete="current-password"
         >
-        <p id="fbError" class="admin-error"></p>
+
+        <p
+          id="fbError"
+          class="admin-error"
+          role="alert"
+        ></p>
+
         <div class="admin-actions">
-          <button class="admin-primary">دخول</button>
-          <button type="button" id="fbCancel" class="admin-muted">
+          <button class="admin-primary" type="submit">
+            دخول
+          </button>
+
+          <button
+            type="button"
+            id="fbCancel"
+            class="admin-muted"
+          >
             إلغاء
           </button>
         </div>
@@ -208,17 +251,28 @@
 
     $('fbLogin').onsubmit = async e => {
       e.preventDefault();
+
+      const email = $('fbEmail').value.trim();
+      const password = $('fbPass').value;
+
       $('fbError').textContent = 'جارٍ التحقق...';
 
       try {
+        loginInProgress = true;
+
         await signInWithEmailAndPassword(
           auth,
-          $('fbEmail').value.trim(),
-          $('fbPass').value
+          email,
+          password
         );
-        hide();
+
+        // The auth listener handles the welcome screen.
       } catch (err) {
-        $('fbError').textContent = message(err);
+        loginInProgress = false;
+
+        if ($('fbError')) {
+          $('fbError').textContent = message(err);
+        }
       }
     };
   }
@@ -229,14 +283,20 @@
     }
 
     const id = KEYS[key];
-    if (!id) return;
+
+    if (!id) {
+      throw Error('مفتاح البيانات غير معروف');
+    }
 
     const ref = doc(db, 'dashboard', id);
 
     await runTransaction(db, async tx => {
       const old = await tx.get(ref);
+
       const revision = (
-        old.exists() ? old.data().revision || 0 : 0
+        old.exists()
+          ? old.data().revision || 0
+          : 0
       ) + 1;
 
       tx.set(ref, {
@@ -250,7 +310,7 @@
 
     try {
       await addDoc(collection(db, 'auditLogs'), {
-        action,
+        action: action || 'تحديث البيانات',
         document: id,
         uid: user.uid,
         name: displayName(),
@@ -265,10 +325,16 @@
   window.centralLabSave = async (key, value, action) => {
     try {
       await write(key, value, action);
+
       localStorage.setItem(key, value);
+
       return true;
     } catch (err) {
-      alert('لم يُحفظ التعديل في Firebase: ' + message(err));
+      alert(
+        'لم يُحفظ التعديل في Firebase: ' +
+        message(err)
+      );
+
       return false;
     }
   };
@@ -281,49 +347,55 @@
     );
   };
 
-  // Prevent continuous page reload loops.
-  function safeReload() {
-    if (busy) return;
-
-    const now = Date.now();
-    const last = Number(
-      sessionStorage.getItem(RELOAD_KEY) || 0
-    );
-
-    if (now - last < RELOAD_COOLDOWN) {
-      console.warn('Firebase reload loop prevented');
-      return;
-    }
-
-    busy = true;
-    sessionStorage.setItem(RELOAD_KEY, String(now));
-    location.reload();
-  }
-
+  // Firebase synchronization without automatic page reload.
   function subscribe() {
-    unsubs.forEach(f => f());
+    unsubs.forEach(unsubscribe => unsubscribe());
     unsubs = [];
 
     if (!user) return;
 
     Object.entries(KEYS).forEach(([key, id]) => {
-      unsubs.push(
-        onSnapshot(
-          doc(db, 'dashboard', id),
-          snap => {
-            if (!snap.exists()) return;
+      const unsubscribe = onSnapshot(
+        doc(db, 'dashboard', id),
 
-            const json = JSON.stringify(snap.data().value);
-            const old = localStorage.getItem(key);
+        snap => {
+          if (!snap.exists()) return;
 
-            if (json !== old) {
-              localStorage.setItem(key, json);
-              safeReload();
-            }
-          },
-          err => console.error('Firebase sync:', err)
-        )
+          const data = snap.data();
+
+          if (!Object.prototype.hasOwnProperty.call(
+            data,
+            'value'
+          )) {
+            return;
+          }
+
+          const json = JSON.stringify(data.value);
+          const old = localStorage.getItem(key);
+
+          if (json === old) return;
+
+          localStorage.setItem(key, json);
+
+          console.info(
+            'Firebase data synchronized:',
+            id
+          );
+
+          // No location.reload() here.
+          // Updated data will appear after a manual refresh
+          // unless the application supports live rendering.
+        },
+
+        err => {
+          console.error(
+            'Firebase synchronization error:',
+            err
+          );
+        }
       );
+
+      unsubs.push(unsubscribe);
     });
   }
 
@@ -333,19 +405,38 @@
     show(`
       <div class="admin-top">
         <h2>إدارة النظام</h2>
-        <button id="fbClose">إغلاق</button>
+
+        <button id="fbClose" type="button">
+          إغلاق
+        </button>
       </div>
+
       <div class="admin-actions">
-        <button id="fbUsers" class="admin-primary">
+        <button
+          id="fbUsers"
+          class="admin-primary"
+          type="button"
+        >
           المستخدمون
         </button>
-        <button id="fbLogs" class="admin-muted">
+
+        <button
+          id="fbLogs"
+          class="admin-muted"
+          type="button"
+        >
           سجل النشاط
         </button>
-        <button id="fbLogout" class="admin-muted">
+
+        <button
+          id="fbLogout"
+          class="admin-muted"
+          type="button"
+        >
           تسجيل الخروج
         </button>
       </div>
+
       <div id="fbContent"></div>
     `);
 
@@ -354,8 +445,12 @@
     $('fbLogs').onclick = renderLogs;
 
     $('fbLogout').onclick = async () => {
-      await signOut(auth);
-      hide();
+      try {
+        await signOut(auth);
+        hide();
+      } catch (err) {
+        alert(message(err));
+      }
     };
 
     renderUsers();
@@ -366,16 +461,26 @@
 
     const el = $('fbContent');
 
+    if (!el) return;
+
     el.innerHTML = `
       <h3>إضافة مستخدم</h3>
+
       <form id="fbAdd">
         <label>الاسم</label>
         <input id="fbName" required>
 
         <label>البريد الإلكتروني</label>
-        <input id="fbNewEmail" type="email" required>
+        <input
+          id="fbNewEmail"
+          type="email"
+          required
+        >
 
-        <label>كلمة مرور أولية (6 أحرف على الأقل)</label>
+        <label>
+          كلمة مرور أولية (6 أحرف على الأقل)
+        </label>
+
         <input
           id="fbNewPass"
           type="password"
@@ -384,15 +489,22 @@
         >
 
         <label>الصلاحية</label>
+
         <select id="fbRole">
           <option value="editor">محرر</option>
           <option value="viewer">مشاهد</option>
         </select>
 
         <div class="admin-actions">
-          <button class="admin-primary">إضافة مستخدم</button>
+          <button
+            class="admin-primary"
+            type="submit"
+          >
+            إضافة مستخدم
+          </button>
         </div>
-        <p id="fbAddError"></p>
+
+        <p id="fbAddError" role="status"></p>
       </form>
 
       <div id="fbUserList"></div>
@@ -406,9 +518,15 @@
       const pass = $('fbNewPass').value;
       const role = $('fbRole').value;
 
-      let secondary;
+      const status = $('fbAddError');
+
+      let secondary = null;
 
       try {
+        if (status) {
+          status.textContent = 'جارٍ إنشاء الحساب...';
+        }
+
         secondary = initializeApp(
           config,
           'central-lab-user-provisioning'
@@ -416,35 +534,51 @@
 
         const secondaryAuth = getAuth(secondary);
 
-        const cred = await createUserWithEmailAndPassword(
-          secondaryAuth,
-          email,
-          pass
-        );
+        const cred =
+          await createUserWithEmailAndPassword(
+            secondaryAuth,
+            email,
+            pass
+          );
 
-        await setDoc(doc(db, 'users', cred.user.uid), {
-          name,
-          email,
-          role,
-          createdAt: serverTimestamp(),
-          createdBy: ROOT
-        });
+        await setDoc(
+          doc(db, 'users', cred.user.uid),
+          {
+            name,
+            email,
+            role,
+            createdAt: serverTimestamp(),
+            createdBy: ROOT
+          }
+        );
 
         await signOut(secondaryAuth);
 
-        $('fbAddError').textContent = 'تم إنشاء الحساب';
+        if (status) {
+          status.textContent = 'تم إنشاء الحساب بنجاح';
+        }
+
         await renderUsers();
       } catch (err) {
-        $('fbAddError').textContent = message(err);
+        if (status && status.isConnected) {
+          status.textContent = message(err);
+        } else {
+          alert(message(err));
+        }
       } finally {
         if (secondary) {
-          await deleteApp(secondary).catch(console.error);
+          await deleteApp(secondary).catch(
+            console.error
+          );
         }
       }
     };
 
     try {
-      const snap = await getDocs(collection(db, 'users'));
+      const snap = await getDocs(
+        collection(db, 'users')
+      );
+
       const list = $('fbUserList');
 
       if (!list) return;
@@ -453,13 +587,25 @@
         '<h3>الحسابات</h3>' +
         snap.docs.map(d => `
           <div class="admin-item">
-            <b>${esc(d.data().name || d.data().email)}</b>
-            <small>${esc(d.data().role || 'viewer')}</small>
+            <b>
+              ${esc(
+                d.data().name ||
+                d.data().email
+              )}
+            </b>
+
+            <small>
+              ${esc(
+                d.data().role || 'viewer'
+              )}
+            </small>
           </div>
         `).join('');
+
     } catch (err) {
       if ($('fbUserList')) {
-        $('fbUserList').textContent = message(err);
+        $('fbUserList').textContent =
+          message(err);
       }
     }
   }
@@ -469,10 +615,18 @@
 
     const el = $('fbContent');
 
+    if (!el) return;
+
     el.innerHTML = `
       <h3>سجل نشاط المستخدمين</h3>
-      <p>سجل مركزي محفوظ في Firebase</p>
-      <div id="fbLogList">جارٍ التحميل...</div>
+
+      <p>
+        سجل مركزي محفوظ في Firebase
+      </p>
+
+      <div id="fbLogList">
+        جارٍ التحميل...
+      </div>
     `;
 
     try {
@@ -485,47 +639,109 @@
       );
 
       const list = $('fbLogList');
+
       if (!list) return;
 
-      list.innerHTML = snap.docs.map(d => {
-        const x = d.data();
+      list.innerHTML =
+        snap.docs.map(d => {
+          const x = d.data();
 
-        return `
-          <div class="admin-item">
-            <div>
-              <b>${esc(x.action)}</b>
-              <small>
-                ${esc(x.name)} ·
-                ${esc(x.at?.toDate()?.toLocaleString('ar-SA') || 'قيد الحفظ')}
-              </small>
+          const date = x.at?.toDate?.()
+            ?.toLocaleString('ar-SA') ||
+            'قيد الحفظ';
+
+          return `
+            <div class="admin-item">
+              <div>
+                <b>${esc(x.action)}</b>
+
+                <small>
+                  ${esc(x.name)} ·
+                  ${esc(date)}
+                </small>
+              </div>
             </div>
-          </div>
-        `;
-      }).join('') || 'لا توجد سجلات';
+          `;
+        }).join('') ||
+        'لا توجد سجلات';
+
     } catch (err) {
       if ($('fbLogList')) {
-        $('fbLogList').textContent = message(err);
+        $('fbLogList').textContent =
+          message(err);
       }
     }
   }
 
-  const entry = document.createElement('button');
-  entry.id = 'adminEntry';
-  entry.className = 'admin-entry';
-  entry.textContent = '🔐 Admin';
+  // Create one admin entry button only.
+  let entry = $('adminEntry');
 
-  document.querySelector('.view-group')?.append(entry);
+  if (!entry) {
+    entry = document.createElement('button');
+    entry.id = 'adminEntry';
+    entry.className = 'admin-entry';
+    entry.type = 'button';
+    entry.textContent = '🔐 Admin';
+
+    document
+      .querySelector('.view-group')
+      ?.append(entry);
+  }
 
   entry.onclick = () => {
     if (!user) {
       login();
-    } else if (admin()) {
-      manage();
-    } else {
-      welcome(true);
+      return;
     }
+
+    if (admin()) {
+      manage();
+      return;
+    }
+
+    show(`
+      <h2>الحساب الحالي</h2>
+
+      <p>
+        المستخدم:
+        <b>${esc(displayName())}</b>
+      </p>
+
+      <p>
+        الصلاحية:
+        <b>
+          ${editor() ? 'محرر' : 'مشاهد'}
+        </b>
+      </p>
+
+      <div class="admin-actions">
+        <button
+          id="fbCloseAccount"
+          class="admin-primary"
+          type="button"
+        >
+          متابعة
+        </button>
+
+        <button
+          id="fbAccountLogout"
+          class="admin-muted"
+          type="button"
+        >
+          تسجيل الخروج
+        </button>
+      </div>
+    `);
+
+    $('fbCloseAccount').onclick = hide;
+
+    $('fbAccountLogout').onclick = async () => {
+      await signOut(auth);
+      hide();
+    };
   };
 
+  // Authentication listener.
   onAuthStateChanged(auth, async u => {
     const version = ++authVersion;
     const previousUid = user?.uid || null;
@@ -534,26 +750,42 @@
     profile = null;
 
     if (!u) {
+      loginInProgress = false;
+
       sessionStorage.removeItem(WELCOME_KEY);
-      unsubs.forEach(f => f());
+
+      unsubs.forEach(fn => fn());
       unsubs = [];
+
       updateButtons();
+
       return;
     }
 
-    if (previousUid && previousUid !== u.uid) {
+    if (
+      previousUid &&
+      previousUid !== u.uid
+    ) {
       sessionStorage.removeItem(WELCOME_KEY);
     }
 
     if (!admin()) {
       try {
-        const s = await getDoc(doc(db, 'users', u.uid));
+        const s = await getDoc(
+          doc(db, 'users', u.uid)
+        );
 
         if (version !== authVersion) return;
 
-        profile = s.exists() ? s.data() : null;
-      } catch (e) {
-        console.error(e);
+        profile = s.exists()
+          ? s.data()
+          : null;
+
+      } catch (err) {
+        console.error(
+          'User profile error:',
+          err
+        );
       }
     } else {
       profile = {
@@ -567,33 +799,61 @@
     subscribe();
     updateButtons();
 
-    // Only once per authenticated tab session.
-    welcome();
+    // Do not show welcome when Firebase restores a session.
+    // Show it only after an explicit successful login.
+    if (loginInProgress) {
+      loginInProgress = false;
+      welcome();
+    }
   });
 
-  document.addEventListener('click', e => {
-    const t = e.target.closest(
-      '#editBtn,#teamAdd,#teamCards [data-edit],' +
-      '#teamCards [data-delete],#save,#reset'
-    );
+  // Protect editing actions.
+  document.addEventListener(
+    'click',
+    e => {
+      const target = e.target.closest(
+        '#editBtn,#teamAdd,' +
+        '#teamCards [data-edit],' +
+        '#teamCards [data-delete],' +
+        '#save,#reset'
+      );
 
-    if (t && !editor()) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      login();
-    }
-  }, true);
+      if (target && !editor()) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
 
-  document.addEventListener('submit', e => {
-    if (
-      e.target.id === 'teamForm' &&
-      !editor()
-    ) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      login();
-    }
-  }, true);
+        if (!user) {
+          login();
+        } else {
+          alert(
+            'لا تمتلك صلاحية تعديل البيانات'
+          );
+        }
+      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    'submit',
+    e => {
+      if (
+        e.target.id === 'teamForm' &&
+        !editor()
+      ) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+
+        if (!user) {
+          login();
+        } else {
+          alert(
+            'لا تمتلك صلاحية تعديل بيانات الفريق'
+          );
+        }
+      }
+    },
+    true
+  );
 
 })();
-
