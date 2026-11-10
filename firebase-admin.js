@@ -1,24 +1,29 @@
 
-/* Firebase-backed administration */
+/*
+ CENTRAL LABORATORY — UNIVERSITY OF TABUK
+ Firebase Administration & Real-Time Synchronization
+ Public Team Directory / Admin-Only Team Editing
+*/
+
 (async () => {
-  'use strict';
+  "use strict";
 
   const config = {
-    apiKey: 'AIzaSyDtr0qH-_87XYw26_b2wMjXaIhJC--9xbs',
-    authDomain: 'centrallabuniversity-of-tabuk.firebaseapp.com',
-    projectId: 'centrallabuniversity-of-tabuk',
-    appId: '1:833984703398:web:fdb2e3de00e403340abd67'
+    apiKey: "AIzaSyDtr0qH-_87XYw26_b2wMjXaIhJC--9xbs",
+    authDomain: "centrallabuniversity-of-tabuk.firebaseapp.com",
+    projectId: "centrallabuniversity-of-tabuk",
+    appId: "1:833984703398:web:fdb2e3de00e403340abd67"
   };
 
-  const ROOT = 'zPzvmsBu9GTbQTc0njW62lOplr93';
+  const ROOT = "zPzvmsBu9GTbQTc0njW62lOplr93";
 
   const KEYS = {
-    centralLabsDigitalTwinData: 'labs',
-    centralLabTeamMembersV1: 'team'
+    centralLabsDigitalTwinData: "labs",
+    centralLabTeamMembersV1: "team"
   };
 
   const [
-    { initializeApp, deleteApp },
+    { initializeApp, getApps, getApp, deleteApp },
     {
       getAuth,
       signInWithEmailAndPassword,
@@ -31,9 +36,9 @@
       doc,
       getDoc,
       getDocs,
-      setDoc,
       collection,
       addDoc,
+      setDoc,
       onSnapshot,
       query,
       orderBy,
@@ -42,108 +47,474 @@
       runTransaction
     }
   ] = await Promise.all([
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js')
+    import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"),
+    import("https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"),
+    import("https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js")
   ]);
 
-  const app = initializeApp(config);
+  const app = getApps().length
+    ? getApp()
+    : initializeApp(config);
+
+  if (app.options.projectId !== config.projectId) {
+    console.error("Firebase project mismatch");
+    return;
+  }
+
   const auth = getAuth(app);
   const db = getFirestore(app);
-
   const $ = id => document.getElementById(id);
 
-  const esc = s => String(s ?? '').replace(
+  const esc = s => String(s ?? "").replace(
     /[&<>"']/g,
     c => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    }[c])
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[c]
   );
 
   let user = null;
   let profile = null;
-  let unsubs = [];
   let authVersion = 0;
   let loginInProgress = false;
 
-  const WELCOME_KEY = 'centralLabWelcomeShown';
+  const listeners = new Map();
+  const subscriptions = new Map();
 
-  const overlay = document.createElement('div');
-  overlay.id = 'adminOverlay';
-  overlay.className = 'admin-overlay';
-  overlay.style.display = 'none';
-  document.body.append(overlay);
+  const WELCOME_KEY = "centralLabWelcomeShown";
+
+  // =====================================================
+  // AUTHORIZATION
+  // =====================================================
+
+  function admin() {
+    return !!user && user.uid === ROOT;
+  }
+
+  function editor() {
+    return !!user && (
+      admin() || profile?.role === "editor"
+    );
+  }
+
+  function displayName() {
+    return profile?.name || user?.email || "مستخدم";
+  }
+
+  window.centralLabIsAdmin = () => admin();
+
+  window.centralLabCanEdit = () => editor();
+
+  window.centralLabCurrentUser = () => ({
+    uid: user?.uid || null,
+    name: user ? displayName() : null,
+    role: admin()
+      ? "admin"
+      : editor()
+        ? "editor"
+        : "viewer"
+  });
+
+  function authChanged() {
+    window.dispatchEvent(
+      new CustomEvent("centralLabAuthChanged", {
+        detail: {
+          admin: admin(),
+          editor: editor(),
+          user: window.centralLabCurrentUser()
+        }
+      })
+    );
+  }
+
+  // =====================================================
+  // ADMIN OVERLAY
+  // =====================================================
+
+  let overlay = $("adminOverlay");
+
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "adminOverlay";
+    overlay.className = "admin-overlay";
+    overlay.style.display = "none";
+    document.body.appendChild(overlay);
+  }
 
   function show(html) {
     overlay.innerHTML =
       '<section class="admin-panel" role="dialog" aria-modal="true">' +
       html +
-      '</section>';
+      "</section>";
 
-    overlay.style.display = 'flex';
+    overlay.style.display = "flex";
   }
 
   function hide() {
-    overlay.style.display = 'none';
+    overlay.style.display = "none";
   }
 
   function message(err) {
     return ({
-      'auth/invalid-credential': 'بيانات الدخول غير صحيحة',
-      'auth/email-already-in-use': 'البريد مستخدم بالفعل',
-      'auth/weak-password': 'كلمة المرور ضعيفة',
-      'permission-denied': 'لا توجد صلاحية لإجراء هذه العملية'
-    }[err?.code] || err?.message || 'تعذرت العملية');
+      "auth/invalid-credential": "بيانات الدخول غير صحيحة",
+      "auth/email-already-in-use": "البريد مستخدم بالفعل",
+      "auth/weak-password": "كلمة المرور ضعيفة",
+      "permission-denied": "لا توجد صلاحية لإجراء العملية"
+    }[err?.code] || err?.message || "تعذرت العملية");
   }
 
-  function displayName() {
-    return profile?.name || user?.email || 'مستخدم';
-  }
-
-  function admin() {
-    return user?.uid === ROOT;
-  }
-
-  function editor() {
-    return !!user && (
-      admin() || profile?.role === 'editor'
-    );
-  }
+  // =====================================================
+  // TEAM PERMISSIONS
+  // =====================================================
 
   function updateButtons() {
+    const canEdit = editor();
+    const isAdmin = admin();
+
+    // Team directory is public.
+    const teamNav = $("teamNavBtn");
+
+    if (teamNav) {
+      teamNav.hidden = false;
+      teamNav.disabled = false;
+      teamNav.style.display = "";
+      teamNav.removeAttribute("aria-disabled");
+    }
+
+    // Other laboratory editing permissions.
     document.querySelectorAll(
-      '#editBtn,#teamAdd,#teamImport,#importFile,#reset'
+      "#editBtn,#importFile,#reset"
     ).forEach(el => {
-      el.disabled = !editor();
-      el.title = editor()
-        ? ''
-        : 'يتطلب تسجيل الدخول بصلاحية التعديل';
+      el.disabled = !canEdit;
+      el.title = canEdit
+        ? ""
+        : "يتطلب تسجيل الدخول بصلاحية التعديل";
     });
 
+    // Team editing is restricted to the root admin.
     document.querySelectorAll(
-      '#teamCards [data-edit],#teamCards [data-delete]'
+      "#teamAdd,#teamImport"
     ).forEach(el => {
-      el.disabled = !editor();
+      el.hidden = !isAdmin;
+      el.disabled = !isAdmin;
+      el.style.display = isAdmin ? "" : "none";
     });
+
+    const importInput = $("teamImport");
+
+    if (importInput) {
+      const label = importInput.closest("label");
+
+      if (label) {
+        label.hidden = !isAdmin;
+        label.style.display = isAdmin ? "" : "none";
+      }
+    }
+
+    document.querySelectorAll(
+      "#teamCards [data-edit]," +
+      "#teamCards [data-delete]"
+    ).forEach(el => {
+      el.hidden = !isAdmin;
+      el.disabled = !isAdmin;
+      el.style.display = isAdmin ? "" : "none";
+    });
+
+    // Hide the editing form for visitors.
+    if (!isAdmin) {
+      $("teamForm")?.classList.add("hidden");
+    }
   }
 
-  // Welcome is displayed only after an explicit login.
+  // =====================================================
+  // FIRESTORE DATA
+  // =====================================================
+
+  function dataRef(id) {
+    return doc(db, "dashboard", id);
+  }
+
+  function parseValue(value) {
+    if (typeof value === "string") {
+      return JSON.parse(value);
+    }
+
+    return value;
+  }
+
+  function keyToId(key) {
+    return KEYS[key] || null;
+  }
+
+  // =====================================================
+  // CENTRAL SAVE
+  // =====================================================
+
+  async function write(key, value, action) {
+    const id = keyToId(key);
+
+    if (!id) {
+      throw Error("مفتاح البيانات غير معروف");
+    }
+
+    // Team can be modified by root admin only.
+    if (id === "team" && !admin()) {
+      throw Error("تعديل فريق العمل متاح لمدير النظام فقط");
+    }
+
+    if (id !== "team" && !editor()) {
+      throw Error("يجب تسجيل الدخول بصلاحية محرر");
+    }
+
+    const parsed = parseValue(value);
+    const ref = dataRef(id);
+
+    await runTransaction(db, async tx => {
+      const old = await tx.get(ref);
+
+      const revision =
+        (old.exists() ? old.data().revision || 0 : 0) + 1;
+
+      tx.set(ref, {
+        value: parsed,
+        revision,
+        updatedAt: serverTimestamp(),
+        updatedBy: user.uid,
+        updatedByName: displayName()
+      });
+    });
+
+    // Audit logging must not roll back a successful save.
+    try {
+      await addDoc(collection(db, "auditLogs"), {
+        action: action || "تحديث البيانات",
+        document: id,
+        uid: user.uid,
+        name: displayName(),
+        email: user.email || "",
+        at: serverTimestamp()
+      });
+    } catch (err) {
+      console.error("Audit log error:", err);
+    }
+
+    return true;
+  }
+
+  window.centralLabSave = async (key, value, action) => {
+    try {
+      await write(key, value, action);
+
+      localStorage.setItem(
+        key,
+        typeof value === "string"
+          ? value
+          : JSON.stringify(value)
+      );
+
+      return true;
+    } catch (err) {
+      console.error("Firebase save failed:", err);
+
+      alert(
+        "لم يُحفظ التعديل في Firebase: " + message(err)
+      );
+
+      return false;
+    }
+  };
+
+  window.centralLabRemove = async (key, action) => {
+    return window.centralLabSave(
+      key,
+      JSON.stringify(window.__LAB_DATA__),
+      action
+    );
+  };
+
+  // =====================================================
+  // REAL-TIME FIREBASE SUBSCRIPTIONS
+  // =====================================================
+
+  /*
+   centralLabSubscribe("team", callback, errorCallback)
+
+   Works for visitors and signed-in users.
+   Reads dashboard/team -> value.
+  */
+
+  window.centralLabSubscribe = (
+    id,
+    callback,
+    errorCallback
+  ) => {
+    if (!["team", "labs"].includes(id)) {
+      throw Error("نوع بيانات غير معروف");
+    }
+
+    if (typeof callback !== "function") {
+      throw Error("يلزم تحديد دالة استقبال البيانات");
+    }
+
+    const unsubscribe = onSnapshot(
+      dataRef(id),
+      { includeMetadataChanges: true },
+      snapshot => {
+        // Do not treat cached data as confirmed server data.
+        if (snapshot.metadata.fromCache) {
+          console.info(
+            "Waiting for Firebase server:", id
+          );
+          return;
+        }
+
+        if (!snapshot.exists()) {
+          const err = Error(
+            "مستند " + id + " غير موجود في Firebase"
+          );
+
+          console.warn(err.message);
+          errorCallback?.(err);
+          return;
+        }
+
+        const data = snapshot.data();
+
+        if (!Object.prototype.hasOwnProperty.call(
+          data, "value"
+        )) {
+          const err = Error(
+            "الحقل value غير موجود في مستند " + id
+          );
+
+          errorCallback?.(err);
+          return;
+        }
+
+        try {
+          const value = parseValue(data.value);
+
+          callback(value, {
+            revision: data.revision || 0,
+            updatedAt: data.updatedAt || null,
+            updatedBy: data.updatedBy || null
+          });
+
+        } catch (err) {
+          console.error("Invalid Firebase data:", err);
+          errorCallback?.(err);
+        }
+      },
+      err => {
+        console.error(
+          "Firebase listener error:",
+          id,
+          err
+        );
+
+        errorCallback?.(err);
+      }
+    );
+
+    return unsubscribe;
+  };
+
+  // =====================================================
+  // INTERNAL SYNCHRONIZATION
+  // =====================================================
+
+  function syncDocument(key, id) {
+    const oldUnsubscribe = listeners.get(id);
+
+    if (oldUnsubscribe) {
+      oldUnsubscribe();
+    }
+
+    const unsubscribe = window.centralLabSubscribe(
+      id,
+      value => {
+        const json = JSON.stringify(value);
+        const old = localStorage.getItem(key);
+
+        if (old !== json) {
+          localStorage.setItem(key, json);
+        }
+
+        window.dispatchEvent(
+          new CustomEvent("centralLabDataUpdated", {
+            detail: {
+              key,
+              document: id,
+              value
+            }
+          })
+        );
+
+        // Compatibility event for code listening to storage.
+        if (old !== json) {
+          window.dispatchEvent(
+            new StorageEvent("storage", {
+              key,
+              oldValue: old,
+              newValue: json,
+              storageArea: localStorage
+            })
+          );
+        }
+
+        console.info(
+          "Firebase data synchronized:", id
+        );
+      },
+      err => {
+        console.error(
+          "Synchronization error:", id, err
+        );
+      }
+    );
+
+    listeners.set(id, unsubscribe);
+  }
+
+  function startSynchronization() {
+    // Team is public, including users not signed in.
+    syncDocument(
+      "centralLabTeamMembersV1",
+      "team"
+    );
+
+    // Preserve existing laboratory synchronization
+    // for authenticated users.
+    if (user) {
+      syncDocument(
+        "centralLabsDigitalTwinData",
+        "labs"
+      );
+    } else {
+      const previous = listeners.get("labs");
+
+      if (previous) {
+        previous();
+        listeners.delete("labs");
+      }
+    }
+  }
+
+  // =====================================================
+  // WELCOME
+  // =====================================================
+
   function welcome() {
     if (!user) return;
 
-    const welcomeId = user.uid;
-
     if (
-      sessionStorage.getItem(WELCOME_KEY) === welcomeId
-    ) {
-      return;
-    }
+      sessionStorage.getItem(WELCOME_KEY) === user.uid
+    ) return;
 
-    sessionStorage.setItem(WELCOME_KEY, welcomeId);
+    sessionStorage.setItem(WELCOME_KEY, user.uid);
 
     show(`
       <h2>مرحبًا بك، ${esc(displayName())}</h2>
@@ -158,10 +529,10 @@
         <b>
           ${
             admin()
-              ? 'مدير النظام'
+              ? "مدير النظام"
               : editor()
-                ? 'محرر'
-                : 'مشاهد'
+                ? "محرر"
+                : "مشاهد"
           }
         </b>
       </p>
@@ -186,17 +557,21 @@
                 إدارة النظام
               </button>
             `
-            : ''
+            : ""
         }
       </div>
     `);
 
-    $('adminContinue').onclick = hide;
+    $("adminContinue").onclick = hide;
 
     if (admin()) {
-      $('adminManage').onclick = manage;
+      $("adminManage").onclick = manage;
     }
   }
+
+  // =====================================================
+  // LOGIN
+  // =====================================================
 
   function login() {
     show(`
@@ -232,7 +607,10 @@
         ></p>
 
         <div class="admin-actions">
-          <button class="admin-primary" type="submit">
+          <button
+            class="admin-primary"
+            type="submit"
+          >
             دخول
           </button>
 
@@ -247,15 +625,15 @@
       </form>
     `);
 
-    $('fbCancel').onclick = hide;
+    $("fbCancel").onclick = hide;
 
-    $('fbLogin').onsubmit = async e => {
+    $("fbLogin").onsubmit = async e => {
       e.preventDefault();
 
-      const email = $('fbEmail').value.trim();
-      const password = $('fbPass').value;
+      const email = $("fbEmail").value.trim();
+      const password = $("fbPass").value;
 
-      $('fbError').textContent = 'جارٍ التحقق...';
+      $("fbError").textContent = "جارٍ التحقق...";
 
       try {
         loginInProgress = true;
@@ -265,139 +643,19 @@
           email,
           password
         );
-
-        // The auth listener handles the welcome screen.
       } catch (err) {
         loginInProgress = false;
 
-        if ($('fbError')) {
-          $('fbError').textContent = message(err);
+        if ($("fbError")) {
+          $("fbError").textContent = message(err);
         }
       }
     };
   }
 
-  async function write(key, value, action) {
-    if (!editor()) {
-      throw Error('يجب تسجيل الدخول بصلاحية محرر');
-    }
-
-    const id = KEYS[key];
-
-    if (!id) {
-      throw Error('مفتاح البيانات غير معروف');
-    }
-
-    const ref = doc(db, 'dashboard', id);
-
-    await runTransaction(db, async tx => {
-      const old = await tx.get(ref);
-
-      const revision = (
-        old.exists()
-          ? old.data().revision || 0
-          : 0
-      ) + 1;
-
-      tx.set(ref, {
-        value: JSON.parse(value),
-        revision,
-        updatedAt: serverTimestamp(),
-        updatedBy: user.uid,
-        updatedByName: displayName()
-      });
-    });
-
-    try {
-      await addDoc(collection(db, 'auditLogs'), {
-        action: action || 'تحديث البيانات',
-        document: id,
-        uid: user.uid,
-        name: displayName(),
-        email: user.email,
-        at: serverTimestamp()
-      });
-    } catch (err) {
-      console.error('Audit log error:', err);
-    }
-  }
-
-  window.centralLabSave = async (key, value, action) => {
-    try {
-      await write(key, value, action);
-
-      localStorage.setItem(key, value);
-
-      return true;
-    } catch (err) {
-      alert(
-        'لم يُحفظ التعديل في Firebase: ' +
-        message(err)
-      );
-
-      return false;
-    }
-  };
-
-  window.centralLabRemove = async (key, action) => {
-    return window.centralLabSave(
-      key,
-      JSON.stringify(window.__LAB_DATA__),
-      action
-    );
-  };
-
-  // Firebase synchronization without automatic page reload.
-  function subscribe() {
-    unsubs.forEach(unsubscribe => unsubscribe());
-    unsubs = [];
-
-    if (!user) return;
-
-    Object.entries(KEYS).forEach(([key, id]) => {
-      const unsubscribe = onSnapshot(
-        doc(db, 'dashboard', id),
-
-        snap => {
-          if (!snap.exists()) return;
-
-          const data = snap.data();
-
-          if (!Object.prototype.hasOwnProperty.call(
-            data,
-            'value'
-          )) {
-            return;
-          }
-
-          const json = JSON.stringify(data.value);
-          const old = localStorage.getItem(key);
-
-          if (json === old) return;
-
-          localStorage.setItem(key, json);
-
-          console.info(
-            'Firebase data synchronized:',
-            id
-          );
-
-          // No location.reload() here.
-          // Updated data will appear after a manual refresh
-          // unless the application supports live rendering.
-        },
-
-        err => {
-          console.error(
-            'Firebase synchronization error:',
-            err
-          );
-        }
-      );
-
-      unsubs.push(unsubscribe);
-    });
-  }
+  // =====================================================
+  // ADMIN MANAGEMENT
+  // =====================================================
 
   async function manage() {
     if (!admin()) return;
@@ -406,7 +664,10 @@
       <div class="admin-top">
         <h2>إدارة النظام</h2>
 
-        <button id="fbClose" type="button">
+        <button
+          id="fbClose"
+          type="button"
+        >
           إغلاق
         </button>
       </div>
@@ -440,11 +701,11 @@
       <div id="fbContent"></div>
     `);
 
-    $('fbClose').onclick = hide;
-    $('fbUsers').onclick = renderUsers;
-    $('fbLogs').onclick = renderLogs;
+    $("fbClose").onclick = hide;
+    $("fbUsers").onclick = renderUsers;
+    $("fbLogs").onclick = renderLogs;
 
-    $('fbLogout').onclick = async () => {
+    $("fbLogout").onclick = async () => {
       try {
         await signOut(auth);
         hide();
@@ -456,11 +717,14 @@
     renderUsers();
   }
 
+  // =====================================================
+  // USER MANAGEMENT
+  // =====================================================
+
   async function renderUsers() {
     if (!admin()) return;
 
-    const el = $('fbContent');
-
+    const el = $("fbContent");
     if (!el) return;
 
     el.innerHTML = `
@@ -510,26 +774,24 @@
       <div id="fbUserList"></div>
     `;
 
-    $('fbAdd').onsubmit = async e => {
+    $("fbAdd").onsubmit = async e => {
       e.preventDefault();
 
-      const name = $('fbName').value.trim();
-      const email = $('fbNewEmail').value.trim();
-      const pass = $('fbNewPass').value;
-      const role = $('fbRole').value;
+      const name = $("fbName").value.trim();
+      const email = $("fbNewEmail").value.trim();
+      const pass = $("fbNewPass").value;
+      const role = $("fbRole").value;
 
-      const status = $('fbAddError');
+      const status = $("fbAddError");
 
       let secondary = null;
 
       try {
-        if (status) {
-          status.textContent = 'جارٍ إنشاء الحساب...';
-        }
+        status.textContent = "جارٍ إنشاء الحساب...";
 
         secondary = initializeApp(
           config,
-          'central-lab-user-provisioning'
+          "central-lab-user-provisioning"
         );
 
         const secondaryAuth = getAuth(secondary);
@@ -542,7 +804,7 @@
           );
 
         await setDoc(
-          doc(db, 'users', cred.user.uid),
+          doc(db, "users", cred.user.uid),
           {
             name,
             email,
@@ -554,17 +816,19 @@
 
         await signOut(secondaryAuth);
 
-        if (status) {
-          status.textContent = 'تم إنشاء الحساب بنجاح';
+        if (status.isConnected) {
+          status.textContent = "تم إنشاء الحساب بنجاح";
         }
 
         await renderUsers();
+
       } catch (err) {
-        if (status && status.isConnected) {
+        if (status.isConnected) {
           status.textContent = message(err);
         } else {
           alert(message(err));
         }
+
       } finally {
         if (secondary) {
           await deleteApp(secondary).catch(
@@ -576,15 +840,14 @@
 
     try {
       const snap = await getDocs(
-        collection(db, 'users')
+        collection(db, "users")
       );
 
-      const list = $('fbUserList');
-
+      const list = $("fbUserList");
       if (!list) return;
 
       list.innerHTML =
-        '<h3>الحسابات</h3>' +
+        "<h3>الحسابات</h3>" +
         snap.docs.map(d => `
           <div class="admin-item">
             <b>
@@ -595,26 +858,26 @@
             </b>
 
             <small>
-              ${esc(
-                d.data().role || 'viewer'
-              )}
+              ${esc(d.data().role || "viewer")}
             </small>
           </div>
-        `).join('');
+        `).join("");
 
     } catch (err) {
-      if ($('fbUserList')) {
-        $('fbUserList').textContent =
-          message(err);
+      if ($("fbUserList")) {
+        $("fbUserList").textContent = message(err);
       }
     }
   }
 
+  // =====================================================
+  // AUDIT LOGS
+  // =====================================================
+
   async function renderLogs() {
     if (!admin()) return;
 
-    const el = $('fbContent');
-
+    const el = $("fbContent");
     if (!el) return;
 
     el.innerHTML = `
@@ -632,14 +895,13 @@
     try {
       const snap = await getDocs(
         query(
-          collection(db, 'auditLogs'),
-          orderBy('at', 'desc'),
+          collection(db, "auditLogs"),
+          orderBy("at", "desc"),
           limit(200)
         )
       );
 
-      const list = $('fbLogList');
-
+      const list = $("fbLogList");
       if (!list) return;
 
       list.innerHTML =
@@ -647,8 +909,8 @@
           const x = d.data();
 
           const date = x.at?.toDate?.()
-            ?.toLocaleString('ar-SA') ||
-            'قيد الحفظ';
+            ?.toLocaleString("ar-SA") ||
+            "قيد الحفظ";
 
           return `
             <div class="admin-item">
@@ -662,29 +924,30 @@
               </div>
             </div>
           `;
-        }).join('') ||
-        'لا توجد سجلات';
+        }).join("") || "لا توجد سجلات";
 
     } catch (err) {
-      if ($('fbLogList')) {
-        $('fbLogList').textContent =
-          message(err);
+      if ($("fbLogList")) {
+        $("fbLogList").textContent = message(err);
       }
     }
   }
 
-  // Create one admin entry button only.
-  let entry = $('adminEntry');
+  // =====================================================
+  // ADMIN ENTRY BUTTON
+  // =====================================================
+
+  let entry = $("adminEntry");
 
   if (!entry) {
-    entry = document.createElement('button');
-    entry.id = 'adminEntry';
-    entry.className = 'admin-entry';
-    entry.type = 'button';
-    entry.textContent = '🔐 Admin';
+    entry = document.createElement("button");
+    entry.id = "adminEntry";
+    entry.className = "admin-entry";
+    entry.type = "button";
+    entry.textContent = "🔐 Admin";
 
     document
-      .querySelector('.view-group')
+      .querySelector(".view-group")
       ?.append(entry);
   }
 
@@ -710,7 +973,7 @@
       <p>
         الصلاحية:
         <b>
-          ${editor() ? 'محرر' : 'مشاهد'}
+          ${editor() ? "محرر" : "مشاهد"}
         </b>
       </p>
 
@@ -733,15 +996,18 @@
       </div>
     `);
 
-    $('fbCloseAccount').onclick = hide;
+    $("fbCloseAccount").onclick = hide;
 
-    $('fbAccountLogout').onclick = async () => {
+    $("fbAccountLogout").onclick = async () => {
       await signOut(auth);
       hide();
     };
   };
 
-  // Authentication listener.
+  // =====================================================
+  // AUTHENTICATION LISTENER
+  // =====================================================
+
   onAuthStateChanged(auth, async u => {
     const version = ++authVersion;
     const previousUid = user?.uid || null;
@@ -751,13 +1017,11 @@
 
     if (!u) {
       loginInProgress = false;
-
       sessionStorage.removeItem(WELCOME_KEY);
 
-      unsubs.forEach(fn => fn());
-      unsubs = [];
-
       updateButtons();
+      authChanged();
+      startSynchronization();
 
       return;
     }
@@ -771,63 +1035,75 @@
 
     if (!admin()) {
       try {
-        const s = await getDoc(
-          doc(db, 'users', u.uid)
+        const snap = await getDoc(
+          doc(db, "users", u.uid)
         );
 
         if (version !== authVersion) return;
 
-        profile = s.exists()
-          ? s.data()
+        profile = snap.exists()
+          ? snap.data()
           : null;
 
       } catch (err) {
         console.error(
-          'User profile error:',
+          "User profile error:",
           err
         );
       }
+
     } else {
       profile = {
-        name: 'د. خليل السعيد',
-        role: 'admin'
+        name: "د. خليل السعيد",
+        role: "admin"
       };
     }
 
     if (version !== authVersion) return;
 
-    subscribe();
     updateButtons();
+    authChanged();
+    startSynchronization();
 
-    // Do not show welcome when Firebase restores a session.
-    // Show it only after an explicit successful login.
     if (loginInProgress) {
       loginInProgress = false;
       welcome();
     }
   });
 
-  // Protect editing actions.
+  // =====================================================
+  // PROTECT EDITING ACTIONS
+  // =====================================================
+
   document.addEventListener(
-    'click',
+    "click",
     e => {
       const target = e.target.closest(
-        '#editBtn,#teamAdd,' +
-        '#teamCards [data-edit],' +
-        '#teamCards [data-delete],' +
-        '#save,#reset'
+        "#editBtn,#teamAdd," +
+        "#teamCards [data-edit]," +
+        "#teamCards [data-delete]," +
+        "#save,#reset"
       );
 
-      if (target && !editor()) {
+      if (!target) return;
+
+      const teamAction = !!target.closest(
+        "#teamAdd,#teamCards [data-edit]," +
+        "#teamCards [data-delete]"
+      );
+
+      const permitted = teamAction
+        ? admin()
+        : editor();
+
+      if (!permitted) {
         e.preventDefault();
         e.stopImmediatePropagation();
 
         if (!user) {
           login();
         } else {
-          alert(
-            'لا تمتلك صلاحية تعديل البيانات'
-          );
+          alert("لا تمتلك صلاحية تعديل البيانات");
         }
       }
     },
@@ -835,11 +1111,11 @@
   );
 
   document.addEventListener(
-    'submit',
+    "submit",
     e => {
       if (
-        e.target.id === 'teamForm' &&
-        !editor()
+        e.target.id === "teamForm" &&
+        !admin()
       ) {
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -848,12 +1124,31 @@
           login();
         } else {
           alert(
-            'لا تمتلك صلاحية تعديل بيانات الفريق'
+            "تعديل فريق العمل متاح لمدير النظام فقط"
           );
         }
       }
     },
     true
+  );
+
+  // =====================================================
+  // CLEANUP
+  // =====================================================
+
+  window.addEventListener("pagehide", () => {
+    listeners.forEach(unsubscribe => {
+      unsubscribe();
+    });
+
+    listeners.clear();
+  });
+
+  // Initial permissions while Firebase restores auth.
+  updateButtons();
+
+  console.info(
+    "Central Laboratory Firebase administration initialized"
   );
 
 })();
