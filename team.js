@@ -1,8 +1,8 @@
 
 /*
- University of Tabuk - Central Laboratory
- team.js
- Public team directory + Firebase synchronization
+  Central Laboratory - University of Tabuk
+  Team Directory - Public View / Admin Edit
+  File: team.js
 */
 
 (() => {
@@ -10,65 +10,39 @@
 
   const $ = id => document.getElementById(id);
 
-  const modal = $("teamModal");
   const nav = $("teamNavBtn");
+  const modal = $("teamModal");
   const cards = $("teamCards");
   const form = $("teamForm");
 
-  if (!modal || !nav || !cards || !form) {
-    console.error("Team interface elements are missing");
+  if (!nav || !modal || !cards || !form) {
+    console.error("Team interface elements not found");
     return;
   }
+
+  const KEY = "centralLabTeamMembersV1";
 
   let members = [];
   let ready = false;
   let editingId = null;
-  let saving = false;
+  let busy = false;
   let subscribed = false;
 
-  const safe = value =>
-    String(value ?? "").replace(
-      /[&<>"']/g,
-      c => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      }[c])
-    );
+  const escapeHTML = value =>
+    String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[char]));
 
-  function isAdmin() {
-    return ready &&
-      window.centralLabIsAdmin?.() === true;
-  }
-
-  function status(message, error = false) {
-    let el = $("teamSyncStatus");
-
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "teamSyncStatus";
-      el.setAttribute("role", "status");
-      el.style.cssText =
-        "padding:9px 12px;margin:10px 0;" +
-        "border-radius:9px;font-size:13px";
-      cards.before(el);
-    }
-
-    el.textContent = message;
-    el.style.background =
-      error ? "#fff0f0" : "#eaf4fc";
-    el.style.color =
-      error ? "#a02020" : "#174567";
-  }
-
-  function normalize(data) {
-    if (!Array.isArray(data)) {
+  function normalize(value) {
+    if (!Array.isArray(value)) {
       throw new Error("بيانات الفريق ليست قائمة صحيحة");
     }
 
-    return data
+    return value
       .filter(x => x && String(x.name || "").trim())
       .map((x, i) => ({
         id: Number(x.id) || i + 1,
@@ -80,69 +54,88 @@
   }
 
   function parseValue(value) {
-    const data =
-      typeof value === "string"
-        ? JSON.parse(value)
-        : value;
-
-    return normalize(data);
+    if (typeof value === "string") {
+      value = JSON.parse(value);
+    }
+    return normalize(value);
   }
 
-  function initials(name) {
-    const parts = name
-      .replace(/^(أ\.د\.|د\.|أ\.|Dr\.)\s*/i, "")
-      .trim()
-      .split(/\s+/);
+  function isAdmin() {
+    return ready &&
+      typeof window.centralLabIsAdmin === "function" &&
+      window.centralLabIsAdmin() === true;
+  }
 
-    return parts.length > 1
-      ? parts[0][0] + parts[1][0]
-      : (parts[0]?.slice(0, 2) || "؟");
+  function status(message, error = false) {
+    let el = $("teamSyncStatus");
+
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "teamSyncStatus";
+      el.setAttribute("role", "status");
+      el.style.cssText =
+        "padding:9px 14px;margin:10px 0;" +
+        "border-radius:10px;font-size:13px";
+
+      cards.before(el);
+    }
+
+    el.textContent = message;
+    el.style.background = error ? "#fff0f0" : "#edf6ff";
+    el.style.color = error ? "#a32121" : "#174a70";
   }
 
   function unique(field) {
     return [...new Set(
-      members.map(x => x[field].trim()).filter(Boolean)
+      members.map(m => m[field].trim()).filter(Boolean)
     )].sort((a, b) => a.localeCompare(b, "ar"));
   }
 
-  function updateSelect(id, values, title) {
-    const el = $(id);
-    if (!el) return;
+  function updateSelect(id, values, label) {
+    const select = $(id);
+    if (!select) return;
 
-    const previous = el.value;
+    const previous = select.value;
 
-    el.innerHTML =
-      `<option value="">${title}</option>` +
-      values.map(x =>
-        `<option value="${safe(x)}">${safe(x)}</option>`
+    select.innerHTML =
+      `<option value="">${label}</option>` +
+      values.map(value =>
+        `<option value="${escapeHTML(value)}">` +
+        `${escapeHTML(value)}</option>`
       ).join("");
 
-    el.value = values.includes(previous)
+    select.value = values.includes(previous)
       ? previous
       : "";
+  }
+
+  function initials(name) {
+    const clean = String(name)
+      .replace(/^(أ\.د\.|د\.|أ\.|Dr\.)\s*/i, "")
+      .trim();
+
+    const words = clean.split(/\s+/);
+
+    return words.length > 1
+      ? words[0].slice(0, 1) + words[1].slice(0, 1)
+      : clean.slice(0, 2);
   }
 
   function permissions() {
     const allowed = isAdmin();
 
-    for (const id of ["teamAdd", "teamImport"]) {
-      const el = $(id);
-      if (!el) continue;
-      el.hidden = !allowed;
-      el.style.display = allowed ? "" : "none";
-    }
+    const add = $("teamAdd");
+    if (add) add.hidden = !allowed;
 
-    const importLabel = $("teamImport")?.closest("label");
-    if (importLabel) {
-      importLabel.hidden = !allowed;
-      importLabel.style.display = allowed ? "" : "none";
-    }
+    const importInput = $("teamImport");
+    const importLabel = importInput?.closest("label");
+
+    if (importLabel) importLabel.hidden = !allowed;
 
     cards.querySelectorAll(
       "[data-edit], [data-delete]"
-    ).forEach(btn => {
-      btn.hidden = !allowed;
-      btn.style.display = allowed ? "" : "none";
+    ).forEach(button => {
+      button.hidden = !allowed;
     });
 
     if (!allowed) form.classList.add("hidden");
@@ -167,18 +160,18 @@
     if ($("teamGroupSuggestions")) {
       $("teamGroupSuggestions").innerHTML =
         groups.map(x =>
-          `<option value="${safe(x)}"></option>`
+          `<option value="${escapeHTML(x)}"></option>`
         ).join("");
     }
 
     if ($("teamSpecialtySuggestions")) {
       $("teamSpecialtySuggestions").innerHTML =
         specialties.map(x =>
-          `<option value="${safe(x)}"></option>`
+          `<option value="${escapeHTML(x)}"></option>`
         ).join("");
     }
 
-    const query = ($("teamSearch")?.value || "")
+    const search = ($("teamSearch")?.value || "")
       .trim()
       .toLocaleLowerCase();
 
@@ -186,29 +179,36 @@
     const specialty =
       $("teamSpecialtyFilter")?.value || "";
 
-    let shown = members.filter(m =>
-      (!group || m.group === group) &&
-      (!specialty || m.specialty === specialty) &&
-      [
-        m.name,
-        m.affiliation,
-        m.specialty,
-        m.group
-      ].some(x =>
-        x.toLocaleLowerCase().includes(query)
-      )
-    );
+    let filtered = members.filter(member => {
+      if (group && member.group !== group) return false;
+
+      if (
+        specialty &&
+        member.specialty !== specialty
+      ) return false;
+
+      if (!search) return true;
+
+      return [
+        member.name,
+        member.affiliation,
+        member.specialty,
+        member.group
+      ].some(value =>
+        value.toLocaleLowerCase().includes(search)
+      );
+    });
 
     const sort = $("teamSort")?.value;
 
     if (sort === "name") {
-      shown.sort((a, b) =>
+      filtered.sort((a, b) =>
         a.name.localeCompare(b.name, "ar")
       );
     }
 
     if (sort === "group") {
-      shown.sort((a, b) =>
+      filtered.sort((a, b) =>
         a.group.localeCompare(b.group, "ar")
       );
     }
@@ -216,7 +216,7 @@
     const counters = {
       teamCount: members.length,
       teamHeaderCount: members.length,
-      teamShown: shown.length,
+      teamShown: filtered.length,
       teamGroupsCount: groups.length,
       teamSpecialtiesCount: specialties.length
     };
@@ -227,72 +227,82 @@
 
     const allowed = isAdmin();
 
-    cards.innerHTML = shown.map(m => `
+    cards.innerHTML = filtered.map(member => `
       <article class="team-card">
         <div class="team-avatar">
-          ${safe(initials(m.name))}
+          ${escapeHTML(initials(member.name))}
         </div>
 
         <div class="team-info">
           <div class="team-person-line">
-            <strong>${safe(m.name)}</strong>
+            <strong>${escapeHTML(member.name)}</strong>
             <span class="team-number">
-              ${String(m.id).padStart(2, "0")}
+              ${String(member.id).padStart(2, "0")}
             </span>
           </div>
 
           <small>
-            ${safe(m.affiliation) || "الجهة غير محددة"}
+            ${escapeHTML(member.affiliation)}
           </small>
 
           <div class="team-tags">
             <span class="team-tag">
-              ◈ ${safe(m.specialty) || "غير محدد"}
+              ${escapeHTML(member.specialty || "غير محدد")}
             </span>
 
             <span class="team-tag gold">
-              ♧ ${safe(m.group) || "غير محدد"}
+              ${escapeHTML(member.group || "غير محدد")}
             </span>
           </div>
         </div>
 
-        <div class="team-actions"
-          ${allowed ? "" : 'style="display:none"'}>
-          <button type="button" data-edit="${m.id}">
-            ✎ تعديل
-          </button>
+        ${allowed ? `
+          <div class="team-actions">
+            <button type="button"
+              data-edit="${member.id}">
+              تعديل
+            </button>
 
-          <button type="button"
-            class="team-delete"
-            data-delete="${m.id}">
-            حذف
-          </button>
-        </div>
+            <button type="button"
+              data-delete="${member.id}">
+              حذف
+            </button>
+          </div>
+        ` : ""}
       </article>
-    `).join("") || `
-      <div class="team-empty">
-        <strong>لا توجد نتائج مطابقة</strong>
-        <p>يمكن تغيير البحث أو عوامل التصفية.</p>
-      </div>
-    `;
+    `).join("");
+
+    if (!filtered.length) {
+      cards.innerHTML = `
+        <div class="team-empty">
+          <strong>
+            ${ready ? "لا توجد نتائج مطابقة" : "جارٍ تحميل بيانات الفريق"}
+          </strong>
+        </div>
+      `;
+    }
 
     permissions();
   }
 
   function openModal() {
     modal.classList.remove("hidden");
-    document.body.classList.add("team-modal-open");
+    modal.style.display = "";
+    modal.setAttribute("aria-hidden", "false");
     nav.setAttribute("aria-expanded", "true");
+
     render();
   }
 
   function closeModal() {
     modal.classList.add("hidden");
-    document.body.classList.remove("team-modal-open");
+    modal.style.display = "";
+    modal.setAttribute("aria-hidden", "true");
     nav.setAttribute("aria-expanded", "false");
     form.classList.add("hidden");
   }
 
+  nav.type = "button";
   nav.addEventListener("click", openModal);
 
   $("teamClose")?.addEventListener(
@@ -308,38 +318,6 @@
     if (event.key === "Escape") closeModal();
   });
 
-  function editMember(id = null) {
-    if (!isAdmin()) return;
-
-    editingId = id;
-
-    const m = members.find(x => x.id === id);
-
-    $("teamFormTitle").textContent =
-      m ? "تعديل بيانات العضو" : "إضافة عضو";
-
-    $("teamName").value = m?.name || "";
-    $("teamAffiliation").value =
-      m?.affiliation || "";
-    $("teamSpecialty").value =
-      m?.specialty || "";
-    $("teamGroup").value = m?.group || "";
-
-    form.classList.remove("hidden");
-    $("teamName").focus();
-  }
-
-  $("teamAdd")?.addEventListener(
-    "click",
-    () => editMember(null)
-  );
-
-  ["teamCancel", "teamCancelBottom"].forEach(id => {
-    $(id)?.addEventListener("click", () => {
-      form.classList.add("hidden");
-    });
-  });
-
   [
     "teamSearch",
     "teamGroupFilter",
@@ -352,39 +330,80 @@
     );
   });
 
+  function editMember(id = null) {
+    if (!isAdmin()) return;
+
+    editingId = id;
+
+    const member = members.find(m => m.id === id);
+
+    $("teamFormTitle").textContent =
+      member ? "تعديل بيانات العضو" : "إضافة عضو";
+
+    $("teamName").value = member?.name || "";
+    $("teamAffiliation").value =
+      member?.affiliation || "";
+    $("teamSpecialty").value =
+      member?.specialty || "";
+    $("teamGroup").value = member?.group || "";
+
+    form.classList.remove("hidden");
+    $("teamName").focus();
+  }
+
+  $("teamAdd")?.addEventListener("click", () => {
+    editMember(null);
+  });
+
+  ["teamCancel", "teamCancelBottom"].forEach(id => {
+    $(id)?.addEventListener("click", () => {
+      form.classList.add("hidden");
+    });
+  });
+
   async function saveTeam(change) {
-    if (!isAdmin() || saving) return false;
+    if (!isAdmin()) {
+      status("التعديل متاح للمدير فقط", true);
+      return false;
+    }
+
+    if (busy) return false;
 
     if (typeof window.centralLabSave !== "function") {
       status("خدمة حفظ Firebase غير متاحة", true);
       return false;
     }
 
-    saving = true;
+    busy = true;
 
     try {
-      const updated = change(
-        members.map(m => ({ ...m }))
-      );
+      const copy = members.map(m => ({ ...m }));
+      const updated = normalize(change(copy));
 
       await window.centralLabSave(
-        "centralLabTeamMembersV1",
-        JSON.stringify(normalize(updated)),
+        KEY,
+        JSON.stringify(updated),
         "تحديث فريق العمل"
       );
 
-      status("تم إرسال التحديث إلى Firebase");
+      status("تم حفظ التعديل في Firebase");
       return true;
+
     } catch (error) {
-      status("فشل الحفظ: " + error.message, true);
+      status(
+        "فشل حفظ التعديل: " + error.message,
+        true
+      );
       return false;
+
     } finally {
-      saving = false;
+      busy = false;
     }
   }
 
   form.addEventListener("submit", async event => {
     event.preventDefault();
+
     if (!isAdmin()) return;
 
     const values = {
@@ -400,15 +419,20 @@
 
     const success = await saveTeam(list => {
       if (id !== null) {
-        const member = list.find(x => x.id === id);
-        if (!member) throw new Error("العضو غير موجود");
+        const member = list.find(m => m.id === id);
+
+        if (!member) {
+          throw new Error("لم يتم العثور على العضو");
+        }
+
         Object.assign(member, values);
       } else {
         list.push({
-          id: Math.max(0, ...list.map(x => x.id)) + 1,
+          id: Math.max(0, ...list.map(m => m.id)) + 1,
           ...values
         });
       }
+
       return list;
     });
 
@@ -419,23 +443,29 @@
     if (!isAdmin()) return;
 
     const edit = event.target.closest("[data-edit]");
-    const del = event.target.closest("[data-delete]");
+    const remove = event.target.closest("[data-delete]");
 
     if (edit) {
       editMember(Number(edit.dataset.edit));
+      return;
     }
 
-    if (del && confirm("هل تريد حذف هذا العضو؟")) {
-      const id = Number(del.dataset.delete);
+    if (remove) {
+      const id = Number(remove.dataset.delete);
+
+      if (!confirm("هل تريد حذف هذا العضو؟")) {
+        return;
+      }
+
       await saveTeam(list =>
-        list.filter(x => x.id !== id)
+        list.filter(member => member.id !== id)
       );
     }
   });
 
   $("teamExport")?.addEventListener("click", () => {
     if (!ready) {
-      status("انتظر تحميل بيانات Firebase", true);
+      status("انتظر تحميل بيانات الفريق", true);
       return;
     }
 
@@ -445,11 +475,11 @@
     );
 
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const link = document.createElement("a");
 
-    a.href = url;
-    a.download = "central-lab-team.json";
-    a.click();
+    link.href = url;
+    link.download = "central-lab-team.json";
+    link.click();
 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
@@ -458,6 +488,7 @@
     "change",
     async event => {
       const file = event.target.files?.[0];
+
       if (!file) return;
 
       try {
@@ -470,24 +501,31 @@
         );
 
         if (!confirm(
-          "سيتم استبدال قائمة الفريق للجميع. هل أنت متأكد؟"
+          "سيتم استبدال قائمة الأعضاء. هل أنت متأكد؟"
         )) return;
 
         await saveTeam(() => data);
+
       } catch (error) {
-        status("فشل الاستيراد: " + error.message, true);
+        status(
+          "فشل الاستيراد: " + error.message,
+          true
+        );
+
       } finally {
         event.target.value = "";
       }
     }
   );
 
-  // Firebase public realtime subscription
+  // Firebase realtime synchronization
 
   function connect() {
     if (subscribed) return;
 
-    if (typeof window.centralLabSubscribe !== "function") {
+    if (
+      typeof window.centralLabSubscribe !== "function"
+    ) {
       status("جارٍ الاتصال بخدمة Firebase...");
       return;
     }
@@ -497,37 +535,51 @@
     try {
       window.centralLabSubscribe(
         "team",
+
         value => {
           try {
             members = parseValue(value);
             ready = true;
+
             render();
+
             status(
               `تمت مزامنة ${members.length} عضوًا من Firebase`
             );
+
           } catch (error) {
             ready = false;
             render();
+
             status(
-              "تعذر قراءة بيانات الفريق: " +
+              "تعذر قراءة بيانات Firebase: " +
               error.message,
               true
             );
           }
         },
+
         error => {
           ready = false;
           render();
+
           status(
-            "تعذر الاتصال بـ Firebase: " +
-            (error?.code || error?.message || error),
+            "تعذر الاتصال ببيانات الفريق: " +
+            (error?.code ||
+             error?.message ||
+             "خطأ غير معروف"),
             true
           );
         }
       );
+
     } catch (error) {
       subscribed = false;
-      status("خطأ الاتصال: " + error.message, true);
+
+      status(
+        "تعذر بدء المزامنة: " + error.message,
+        true
+      );
     }
   }
 
@@ -552,10 +604,7 @@
     }
   );
 
-  // Show public interface immediately
-  nav.hidden = false;
   render();
-  status("جارٍ تحميل أعضاء الفريق...");
   connect();
 
 })();
