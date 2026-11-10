@@ -1,84 +1,261 @@
 
+/*
+  University of Tabuk — Central Laboratory
+  TEAM.JS — Repaired Version
+
+  Public: View and search team members
+  Admin: Add, edit, delete, import
+  Firebase: dashboard/team/value
+
+  IMPORTANT:
+  - Never automatically overwrite Firebase.
+  - Preserve existing member IDs.
+  - Backup data is read-only.
+  - Requires firebase-admin.js:
+      centralLabSubscribe
+      centralLabSave
+      centralLabIsAdmin
+*/
+
 (() => {
   "use strict";
 
-  // CENTRAL LAB — TEAM MANAGEMENT
-  // Public viewing + Admin editing + Real-time sync
-
-  const STORAGE_KEY = "centralLabTeamMembersV1";
-
-  const initial = [
-    ["د. عائشة نواف البلوي", "كلية العلوم / الكيمياء"],
-    ["د. منال أحمد قريش", "كلية العلوم / الكيمياء الحيوية"],
-    ["د. الحسين عجيم", "كلية العلوم الطبية التطبيقية"],
-    ["د. مصطفى زبيدي كعبي", "كلية العلوم / الأحياء"],
-    ["د. خليل يحيى السعيد", "كلية العلوم / قسم الفيزياء"],
-    ["د. نور القرشي", "وحدة الجينوم"],
-    ["د. رامي العسيري", "كلية العلوم / الكيمياء الحيوية"],
-    ["د. رجى عبدالله الغديري", "كلية العلوم"],
-    ["د. ماجدة راجي العتيبي", "كلية العلوم / الكيمياء"],
-    ["أ. هبة محمد العطوي", "فنية مختبر / كلية العلوم"],
-    ["Dr. Uzma Faridi", "كلية العلوم / الكيمياء الحيوية"],
-    ["د. عبدالرحمن العطوي", "باحث ما بعد الدكتوراه / وحدة الجينوم"],
-    ["د. نادر محمد الضويمر", "كلية العلوم / الكيمياء الحيوية"],
-    ["أ.د. هالة بيومي", "كلية العلوم / علوم الغذاء"],
-    ["أ. محمد محمود البلوي", "كلية العلوم / الفيزياء"],
-    ["أ. فهد محمد الخثعمي", "المركز الطبي"],
-    ["د. فاطمة العتيبي", "كلية العلوم / قسم الكيمياء"],
-    ["أ. أحمد العطوي", "كلية العلوم / باحث أكاديمي"]
-  ].map((x, i) => ({
-    id: i + 1,
-    name: x[0],
-    affiliation: x[1],
-    specialty: "",
-    group: ""
-  }));
-
   const $ = id => document.getElementById(id);
 
-  const escapeHTML = value =>
-    String(value ?? "").replace(/[&<>"']/g, char => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;"
-    })[char]);
+  const REQUIRED = [
+    "teamNavBtn",
+    "teamModal",
+    "teamForm",
+    "teamCards",
+    "teamClose",
+    "teamAdd",
+    "teamName",
+    "teamAffiliation",
+    "teamSpecialty",
+    "teamGroup",
+    "teamFormTitle",
+    "teamSearch",
+    "teamGroupFilter",
+    "teamSpecialtyFilter",
+    "teamSort",
+    "teamCount",
+    "teamHeaderCount",
+    "teamShown",
+    "teamGroupsCount",
+    "teamSpecialtiesCount",
+    "teamGroupSuggestions",
+    "teamSpecialtySuggestions",
+    "teamCancel",
+    "teamCancelBottom",
+    "teamExport",
+    "teamImport"
+  ];
 
-  const normalize = arr => arr
-    .filter(m => m && typeof m.name === "string")
-    .map((m, i) => ({
-      id: Number(m.id) || i + 1,
-      name: m.name,
-      affiliation: String(m.affiliation || ""),
-      specialty: String(m.specialty || ""),
-      group: String(m.group || "")
-    }));
+  const missing = REQUIRED.filter(id => !$(id));
 
-  let members = [];
-  let editId = null;
-  let isAdmin = false;
-  let loadedFromServer = false;
-  let saving = false;
-  let unsubscribe = null;
+  if (missing.length) {
+    console.error("Missing Team UI elements:", missing);
+    return;
+  }
+
+  // Original backup: 17 members.
+  // Used only for display if Firebase is unavailable.
+
+  const BACKUP_17 = [
+    {
+      id: 1,
+      name: "د. عايشة نواف البلوي",
+      affiliation: "كلية العلوم / الكيمياء",
+      specialty: "Chemistry",
+      group: "Lab managment and ISO"
+    },
+    {
+      id: 2,
+      name: "د. منال أحمد قبوس",
+      affiliation: "كلية العلوم / الكيمياء الحيوية",
+      specialty: "Biochemistry",
+      group:
+        "Group 2: Sample Preparation & Advanced Research Applications"
+    },
+    {
+      id: 3,
+      name: "د. الحسين عجيم",
+      affiliation: "كلية العلوم الطبية التطبيقية",
+      specialty: "Medical",
+      group:
+        "Group 1,Group 5 & Group 6 : Advanced Microscopy & Materials Characterization"
+    },
+    {
+      id: 4,
+      name: "د. مصطفى زبيدي كعبي",
+      affiliation: "كلية العلوم / الأحياء",
+      specialty: "Biology",
+      group:
+        "Group 1,Group 5 & Group 6 : Advanced Microscopy & Materials Characterization"
+    },
+    {
+      id: 5,
+      name: "د. خليل يحيى السعيد",
+      affiliation: "كلية العلوم / قسم الفيزياء",
+      specialty: "Physics",
+      group:
+        "Group 4 & Group 6 : Materials Science & Physical Measurements"
+    },
+    {
+      id: 6,
+      name: "د. نور القرشي",
+      affiliation: "وحدة الجينوم",
+      specialty: "Biochemistry",
+      group:
+        "Group 5 : Biotechnology & Molecular Sciences"
+    },
+    {
+      id: 7,
+      name: "د. رامي العسيري",
+      affiliation: "كلية العلوم / الكيمياء الحيوية",
+      specialty: "Biochemistry",
+      group:
+        "Group 5 : Biotechnology & Molecular Sciences"
+    },
+    {
+      id: 9,
+      name: "د. ماجدة راجي العتيبي",
+      affiliation: "كلية العلوم / الكيمياء",
+      specialty: "Chemistry",
+      group:
+        "Group 3 :Advanced Chemical & Chromatographic Analysis"
+    },
+    {
+      id: 11,
+      name: "Dr. Uzma Faridi",
+      affiliation: "كلية العلوم / الكيمياء الحيوية",
+      specialty: "Biochemistry",
+      group:
+        "Group 5 : Biotechnology & Molecular Sciences"
+    },
+    {
+      id: 12,
+      name: "د. عبدالرحمن العطوي",
+      affiliation: "باحث ما بعد الدكتوراه / وحدة الجينوم",
+      specialty: "Biology",
+      group:
+        "Group 5 : Biotechnology & Molecular Sciences"
+    },
+    {
+      id: 13,
+      name: "د. نادر محمد الضويمر",
+      affiliation: "كلية العلوم / الكيمياء الحيوية",
+      specialty: "Chemistry",
+      group:
+        "Group 3 :Advanced Chemical & Chromatographic Analysis"
+    },
+    {
+      id: 14,
+      name: "أ.د. هالة بيومي",
+      affiliation: "كلية العلوم / علوم الغذاء",
+      specialty: "Food science",
+      group:
+        "Group 3 :Advanced Chemical & Chromatographic Analysis"
+    },
+    {
+      id: 15,
+      name: "أ. محمد مسعود البلوي",
+      affiliation: "كلية العلوم / الفيزياء",
+      specialty: "Physics",
+      group:
+        "Group 2 & Group 6 : Materials Science & Physical Measurements"
+    },
+    {
+      id: 16,
+      name: "أ. فهد محمد الخثعمي",
+      affiliation: "المركز الطبي",
+      specialty: "Medical",
+      group: "ISO"
+    },
+    {
+      id: 17,
+      name: "د. فاطمة العتيبي",
+      affiliation: "كلية العلوم / قسم الكيمياء",
+      specialty: "Chemistry",
+      group:
+        "Group 2 : Spectroscopic & Elemental Analysis & ISO"
+    },
+    {
+      id: 18,
+      name: "أ. أحمد العطوي",
+      affiliation: "كلية العلوم / باحث أكاديمي",
+      specialty: "Physics",
+      group:
+        "Group 2 & Group 6 : Materials Science & Physical Measurements"
+    },
+    {
+      id: 19,
+      name: "د. خلود النهدي",
+      affiliation: "كلية العلوم / الفيزياء",
+      specialty: "Physics",
+      group:
+        "Group 1 : Advanced Microscopy & Materials Characterization & ISO"
+    }
+  ];
 
   const modal = $("teamModal");
   const form = $("teamForm");
 
-  if (!modal || !form) {
-    console.error("Team UI elements not found");
-    return;
+  let members = BACKUP_17.map(x => ({ ...x }));
+  let ready = false;
+  let busy = false;
+  let editId = null;
+
+  function isAdmin() {
+    return ready &&
+      window.centralLabIsAdmin?.() === true;
   }
 
-  // ---------------------------------------------------------
-  // STATUS
-  // ---------------------------------------------------------
-
-  function status(message, isError = false) {
-    console[isError ? "error" : "info"](
-      "[Team Sync]", message
+  function escapeHTML(value) {
+    return String(value ?? "").replace(
+      /[&<>"']/g,
+      c => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[c])
     );
+  }
 
+  function normalize(arr) {
+    return arr
+      .filter(x =>
+        x &&
+        typeof x.name === "string" &&
+        x.name.trim()
+      )
+      .map((m, i) => ({
+        id: Number(m.id) || i + 1,
+        name: m.name,
+        affiliation: String(m.affiliation || ""),
+        specialty: String(m.specialty || ""),
+        group: String(m.group || "")
+      }));
+  }
+
+  function parseValue(value) {
+    const data =
+      typeof value === "string"
+        ? JSON.parse(value)
+        : value;
+
+    if (!Array.isArray(data)) {
+      throw new Error(
+        "dashboard/team.value must be an array"
+      );
+    }
+
+    return normalize(data);
+  }
+
+  function status(message, error = false) {
     let el = $("teamSyncStatus");
 
     if (!el) {
@@ -87,170 +264,137 @@
       el.setAttribute("role", "status");
 
       el.style.cssText = `
-        position:fixed;
-        bottom:20px;
-        left:20px;
-        z-index:99999;
-        padding:12px 18px;
-        border-radius:12px;
-        background:#153c55;
-        color:#fff;
-        font:14px Arial,sans-serif;
-        box-shadow:0 5px 20px #0003;
-        max-width:350px;
+        margin: 8px 0;
+        padding: 8px 12px;
+        border-radius: 8px;
+        font: 13px Arial;
+        background: #eaf3fa;
+        color: #173b50;
       `;
 
-      document.body.appendChild(el);
+      $("teamCards").before(el);
     }
 
     el.textContent = message;
-    el.style.background = isError
-      ? "#a12626"
-      : "#153c55";
+    el.style.background =
+      error ? "#fff0f0" : "#eaf3fa";
+    el.style.color =
+      error ? "#8b1e1e" : "#173b50";
   }
 
-  // ---------------------------------------------------------
-  // PERMISSIONS
-  // ---------------------------------------------------------
+  function permissions() {
+    $("teamNavBtn").hidden = false;
 
-  function checkAdmin() {
-    // يجب أن تأتي هذه القيمة من نظام الإدارة الفعلي.
-    // لا تستخدم localStorage لإثبات صلاحية المدير.
-    return window.centralLabIsAdmin?.() === true;
-  }
+    const canEdit = isAdmin();
 
-  function updatePermissions() {
-    isAdmin = checkAdmin();
-
-    const nav = $("teamNavBtn");
-
-    if (nav) {
-      nav.hidden = false;
-      nav.disabled = false;
-      nav.style.display = "";
-      nav.removeAttribute("aria-disabled");
+    for (const id of ["teamAdd", "teamImport"]) {
+      const el = $(id);
+      el.hidden = !canEdit;
+      el.style.display = canEdit ? "" : "none";
     }
 
-    const adminIds = [
-      "teamAdd",
-      "teamImport"
-    ];
+    const importLabel =
+      $("teamImport").closest("label");
 
-    adminIds.forEach(id => {
-      const element = $(id);
-      if (element) element.hidden = !isAdmin;
-    });
-
-    const importLabel = $("teamImport")?.closest("label");
     if (importLabel) {
-      importLabel.hidden = !isAdmin;
+      importLabel.hidden = !canEdit;
+      importLabel.style.display =
+        canEdit ? "" : "none";
     }
 
-    document.querySelectorAll(
-      "#teamCards [data-edit], #teamCards [data-delete]"
-    ).forEach(button => {
-      button.hidden = !isAdmin;
-    });
+    document
+      .querySelectorAll(
+        "#teamCards [data-edit], #teamCards [data-delete]"
+      )
+      .forEach(el => {
+        el.hidden = !canEdit;
+        el.style.display =
+          canEdit ? "" : "none";
+      });
 
-    if (!isAdmin) {
+    if (!canEdit) {
       form.classList.add("hidden");
     }
   }
 
-  function requireAdmin() {
-    updatePermissions();
-
-    if (!isAdmin) {
-      status("هذه العملية متاحة لمدير النظام فقط", true);
-      return false;
-    }
-
-    if (!loadedFromServer) {
-      status("انتظر تحميل البيانات من Firebase", true);
-      return false;
-    }
-
-    if (saving) return false;
-
-    return true;
-  }
-
-  // ---------------------------------------------------------
-  // HELPERS
-  // ---------------------------------------------------------
-
-  function unique(key) {
-    return [...new Set(
-      members
-        .map(m => m[key].trim())
-        .filter(Boolean)
-    )].sort((a, b) => a.localeCompare(b, "ar"));
-  }
-
   function initials(name) {
     const parts = name
-      .replace(/^(د\.|أ\.د\.|أ\.|Dr\.)\s*/i, "")
+      .replace(
+        /^(د\.|أ\.د\.|أ\.|Dr\.)\s*/i,
+        ""
+      )
       .trim()
       .split(/\s+/);
 
     return parts.length > 1
       ? parts[0][0] + parts[1][0]
-      : parts[0]?.slice(0, 2) || "؟";
+      : (parts[0]?.slice(0, 2) || "؟");
   }
 
-  // ---------------------------------------------------------
-  // RENDER
-  // ---------------------------------------------------------
+  function uniqueValues(key) {
+    return [
+      ...new Set(
+        members
+          .map(m => m[key].trim())
+          .filter(Boolean)
+      )
+    ].sort((a, b) => a.localeCompare(b, "ar"));
+  }
 
   function render() {
-    const search = $("teamSearch").value
-      .trim()
-      .toLocaleLowerCase();
+    const search = $("teamSearch")
+      .value.trim().toLocaleLowerCase();
 
     const group = $("teamGroupFilter").value;
-    const specialty = $("teamSpecialtyFilter").value;
+    const specialty =
+      $("teamSpecialtyFilter").value;
 
-    const groups = unique("group");
-    const specialties = unique("specialty");
+    const groups = uniqueValues("group");
+    const specialties =
+      uniqueValues("specialty");
 
-    function fillSelect(id, title, values, previous) {
-      const select = $(id);
+    function updateOptions(
+      id,
+      values,
+      label,
+      selected
+    ) {
+      const el = $(id);
 
-      select.innerHTML =
-        `<option value="">${title}</option>` +
+      el.innerHTML =
+        `<option value="">${label}</option>` +
         values.map(value =>
-          `<option value="${escapeHTML(value)}">
-            ${escapeHTML(value)}
-          </option>`
+          `<option value="${escapeHTML(value)}">` +
+          `${escapeHTML(value)}</option>`
         ).join("");
 
-      select.value = values.includes(previous)
-        ? previous
+      el.value = values.includes(selected)
+        ? selected
         : "";
     }
 
-    fillSelect(
+    updateOptions(
       "teamGroupFilter",
-      "كل المجموعات",
       groups,
+      "كل المجموعات",
       group
     );
 
-    fillSelect(
+    updateOptions(
       "teamSpecialtyFilter",
-      "كل التخصصات",
       specialties,
+      "كل التخصصات",
       specialty
     );
 
     $("teamGroupSuggestions").innerHTML =
-      groups.map(value =>
-        `<option value="${escapeHTML(value)}"></option>`
+      groups.map(x =>
+        `<option value="${escapeHTML(x)}"></option>`
       ).join("");
 
     $("teamSpecialtySuggestions").innerHTML =
-      specialties.map(value =>
-        `<option value="${escapeHTML(value)}"></option>`
+      specialties.map(x =>
+        `<option value="${escapeHTML(x)}"></option>`
       ).join("");
 
     let shown = members.filter(m =>
@@ -261,8 +405,8 @@
         m.affiliation,
         m.specialty,
         m.group
-      ].some(value =>
-        value.toLocaleLowerCase().includes(search)
+      ].some(x =>
+        x.toLocaleLowerCase().includes(search)
       )
     );
 
@@ -281,89 +425,87 @@
     }
 
     $("teamCount").textContent = members.length;
-    $("teamHeaderCount").textContent = members.length;
+    $("teamHeaderCount").textContent =
+      members.length;
+
     $("teamShown").textContent = shown.length;
-    $("teamGroupsCount").textContent = groups.length;
-    $("teamSpecialtiesCount").textContent = specialties.length;
 
-    $("teamCards").innerHTML = shown.map(m => {
-      const icon = window.teamSpecialtyIcon?.(m);
+    $("teamGroupsCount").textContent =
+      groups.length;
 
-      return `
-        <article class="team-card">
+    $("teamSpecialtiesCount").textContent =
+      specialties.length;
 
-          <div
-            class="team-avatar team-avatar--${escapeHTML(icon?.key || "general")}"
-            title="${escapeHTML(m.specialty || m.affiliation)}"
-            aria-hidden="true"
-          >
-            ${icon?.html || escapeHTML(initials(m.name))}
-          </div>
+    $("teamCards").innerHTML =
+      shown.map(m => {
+        const icon =
+          window.teamSpecialtyIcon?.(m);
 
-          <div class="team-info">
+        const number = String(
+          members.indexOf(m) + 1
+        ).padStart(2, "0");
 
-            <div class="team-person-line">
-              <strong>${escapeHTML(m.name)}</strong>
-
-              <span class="team-number">
-                ${String(members.indexOf(m) + 1).padStart(2, "0")}
-              </span>
+        return `
+          <article class="team-card">
+            <div
+              class="team-avatar team-avatar--${escapeHTML(icon?.key || "general")}"
+              title="${escapeHTML(m.specialty || m.affiliation || "التخصص غير محدد")}"
+              aria-hidden="true"
+            >
+              ${icon?.html || escapeHTML(initials(m.name))}
             </div>
 
-            <small>
-              ${escapeHTML(m.affiliation) || "الجهة غير محددة"}
-            </small>
+            <div class="team-info">
+              <div class="team-person-line">
+                <strong>${escapeHTML(m.name)}</strong>
+                <span class="team-number">${number}</span>
+              </div>
 
-            <div class="team-tags">
+              <small>
+                ${escapeHTML(m.affiliation) || "الجهة غير محددة"}
+              </small>
 
-              <span class="team-tag ${m.specialty ? "" : "team-unset"}">
-                ◈ ${escapeHTML(m.specialty) || "إضافة التخصص"}
-              </span>
+              <div class="team-tags">
+                <span class="team-tag">
+                  ◈ ${escapeHTML(m.specialty) || "إضافة التخصص"}
+                </span>
 
-              <span class="team-tag gold ${m.group ? "" : "team-unset"}">
-                ♧ ${escapeHTML(m.group) || "إضافة مجموعة العمل"}
-              </span>
-
+                <span class="team-tag gold">
+                  ♧ ${escapeHTML(m.group) || "إضافة مجموعة العمل"}
+                </span>
+              </div>
             </div>
-          </div>
 
-          <div class="team-actions" ${isAdmin ? "" : "hidden"}>
+            <div class="team-actions">
+              <button
+                type="button"
+                data-edit="${m.id}"
+              >
+                ✎ تعديل
+              </button>
 
-            <button
-              type="button"
-              data-edit="${m.id}"
-              ${isAdmin ? "" : "hidden"}
-            >
-              ✎ تعديل
-            </button>
-
-            <button
-              type="button"
-              class="team-delete"
-              data-delete="${m.id}"
-              ${isAdmin ? "" : "hidden"}
-            >
-              حذف
-            </button>
-
-          </div>
-        </article>
+              <button
+                type="button"
+                class="team-delete"
+                data-delete="${m.id}"
+              >
+                حذف
+              </button>
+            </div>
+          </article>
+        `;
+      }).join("") ||
+      `
+        <div class="team-empty">
+          <strong>لا توجد نتائج مطابقة</strong>
+          <p>جرّب تغيير كلمات البحث أو إزالة عوامل التصفية.</p>
+        </div>
       `;
-    }).join("") || `
-      <div class="team-empty">
-        <strong>لا توجد نتائج مطابقة</strong>
-        <p>جرّب تغيير كلمات البحث أو عوامل التصفية.</p>
-      </div>
-    `;
 
-    updatePermissions();
+    permissions();
   }
 
-  // ---------------------------------------------------------
-  // MODAL
-  // ---------------------------------------------------------
-
-  function open() {
+  function openModal() {
     modal.classList.remove("hidden");
     document.body.classList.add("team-modal-open");
 
@@ -375,9 +517,11 @@
     render();
   }
 
-  function close() {
+  function closeModal() {
     modal.classList.add("hidden");
-    document.body.classList.remove("team-modal-open");
+    document.body.classList.remove(
+      "team-modal-open"
+    );
 
     $("teamNavBtn").setAttribute(
       "aria-expanded",
@@ -388,20 +532,36 @@
   }
 
   function startEdit(id) {
-    if (!requireAdmin()) return;
+    if (!isAdmin()) {
+      status(
+        "التعديل متاح للمدير فقط بعد اكتمال المزامنة",
+        true
+      );
+      return;
+    }
 
     editId = id;
 
-    const member = members.find(m => m.id === id);
+    const member = members.find(
+      x => x.id === id
+    );
 
-    $("teamFormTitle").textContent = member
-      ? "تعديل بيانات العضو"
-      : "إضافة عضو جديد";
+    $("teamFormTitle").textContent =
+      member
+        ? "تعديل بيانات العضو"
+        : "إضافة عضو جديد";
 
-    $("teamName").value = member?.name || "";
-    $("teamAffiliation").value = member?.affiliation || "";
-    $("teamSpecialty").value = member?.specialty || "";
-    $("teamGroup").value = member?.group || "";
+    $("teamName").value =
+      member?.name || "";
+
+    $("teamAffiliation").value =
+      member?.affiliation || "";
+
+    $("teamSpecialty").value =
+      member?.specialty || "";
+
+    $("teamGroup").value =
+      member?.group || "";
 
     form.classList.remove("hidden");
 
@@ -413,332 +573,403 @@
     $("teamName").focus();
   }
 
-  // ---------------------------------------------------------
-  // REAL-TIME DATA
-  // ---------------------------------------------------------
-
-  function applyRemoteData(data) {
-    let parsed = data;
-
-    // dashboard/team -> value
-    if (
-      parsed &&
-      !Array.isArray(parsed) &&
-      typeof parsed === "object"
-    ) {
-      parsed = parsed.value ?? parsed;
-    }
-
-    if (typeof parsed === "string") {
-      try {
-        parsed = JSON.parse(parsed);
-      } catch (error) {
-        status("تعذر قراءة بيانات فريق العمل", true);
-        return;
-      }
-    }
-
-    if (!Array.isArray(parsed)) {
-      status("صيغة بيانات الفريق غير صحيحة", true);
-      return;
-    }
-
-    members = normalize(parsed);
-    loadedFromServer = true;
-
-    render();
-    status("تمت مزامنة بيانات فريق العمل");
-  }
-
-  function startSync() {
-    if (typeof window.centralLabSubscribe !== "function") {
+  async function save(change) {
+    if (!isAdmin() || busy) {
       status(
-        "مستمع Firebase غير متاح. يلزم ربط centralLabSubscribe.",
+        "التعديل متاح للمدير فقط بعد تحميل Firebase",
         true
       );
-      return;
-    }
-
-    if (unsubscribe) unsubscribe();
-
-    // يجب أن تستمع الدالة إلى dashboard/team
-    // وتعمل للزوار دون اشتراط تسجيل الدخول.
-    unsubscribe = window.centralLabSubscribe(
-      "team",
-      applyRemoteData,
-      error => {
-        loadedFromServer = false;
-        status(
-          "فشل الاتصال ببيانات Firebase: " +
-          (error?.message || error),
-          true
-        );
-      }
-    );
-  }
-
-  // ---------------------------------------------------------
-  // SAVE
-  // ---------------------------------------------------------
-
-  async function persist(nextMembers) {
-    if (!requireAdmin()) return false;
-
-    if (typeof window.centralLabSave !== "function") {
-      status("دالة حفظ Firebase غير متاحة", true);
       return false;
     }
 
-    saving = true;
+    if (
+      typeof window.centralLabSave !== "function"
+    ) {
+      status(
+        "خدمة حفظ Firebase غير متاحة",
+        true
+      );
+      return false;
+    }
+
+    busy = true;
 
     try {
-      const normalized = normalize(nextMembers);
-
-      // يجب أن تحفظ centralLabSave القيمة في:
-      // dashboard/team -> value
-      await window.centralLabSave(
-        STORAGE_KEY,
-        JSON.stringify(normalized),
-        "تعديل بيانات فريق العمل"
+      const latest = members.map(
+        m => ({ ...m })
       );
 
-      // لا نغيّر البيانات المحلية إلا بعد نجاح الحفظ.
-      members = normalized;
-      render();
+      const result = change(latest);
 
-      status("تم حفظ التغييرات في Firebase");
+      if (!Array.isArray(result)) {
+        throw new Error("تعديل غير صالح");
+      }
+
+      await window.centralLabSave(
+        "centralLabTeamMembersV1",
+        JSON.stringify(normalize(result)),
+        "تحديث فريق العمل"
+      );
+
+      status("تم حفظ بيانات الفريق في Firebase");
       return true;
 
     } catch (error) {
       status(
-        "فشل حفظ التعديلات: " +
-        (error?.message || error),
+        "فشل الحفظ: " +
+        (error.message || error),
         true
       );
-
       return false;
 
     } finally {
-      saving = false;
+      busy = false;
     }
   }
 
-  // ---------------------------------------------------------
-  // EVENTS
-  // ---------------------------------------------------------
+  // Navigation
 
-  $("teamNavBtn").addEventListener("click", open);
+  $("teamNavBtn").addEventListener(
+    "click",
+    openModal
+  );
 
-  $("teamClose").addEventListener("click", close);
+  $("teamClose").addEventListener(
+    "click",
+    closeModal
+  );
 
-  modal.addEventListener("click", event => {
-    if (event.target === modal) close();
-  });
-
-  document.addEventListener("keydown", event => {
-    if (
-      event.key === "Escape" &&
-      !modal.classList.contains("hidden")
-    ) {
-      close();
+  modal.addEventListener("click", e => {
+    if (e.target === modal) {
+      closeModal();
     }
   });
+
+  document.addEventListener(
+    "keydown",
+    e => {
+      if (
+        e.key === "Escape" &&
+        !modal.classList.contains("hidden")
+      ) {
+        closeModal();
+      }
+    }
+  );
+
+  // Add member
 
   $("teamAdd").addEventListener(
     "click",
     () => startEdit(null)
   );
 
-  ["teamCancel", "teamCancelBottom"].forEach(id => {
-    $(id).addEventListener("click", () => {
-      form.classList.add("hidden");
-    });
-  });
+  // Cancel editing
 
-  [
-    "teamSearch",
-    "teamGroupFilter",
-    "teamSpecialtyFilter",
-    "teamSort"
-  ].forEach(id => {
+  for (
+    const id of [
+      "teamCancel",
+      "teamCancelBottom"
+    ]
+  ) {
     $(id).addEventListener(
-      id === "teamSearch" ? "input" : "change",
+      "click",
+      () => form.classList.add("hidden")
+    );
+  }
+
+  // Search and filters
+
+  for (
+    const id of [
+      "teamSearch",
+      "teamGroupFilter",
+      "teamSpecialtyFilter",
+      "teamSort"
+    ]
+  ) {
+    $(id).addEventListener(
+      id === "teamSearch"
+        ? "input"
+        : "change",
       render
     );
-  });
+  }
 
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
+  // Save member
 
-    if (!requireAdmin()) return;
+  form.addEventListener(
+    "submit",
+    async e => {
+      e.preventDefault();
 
-    const values = {
-      name: $("teamName").value.trim(),
-      affiliation: $("teamAffiliation").value.trim(),
-      specialty: $("teamSpecialty").value.trim(),
-      group: $("teamGroup").value.trim()
-    };
+      if (!isAdmin()) return;
 
-    if (!values.name) return;
+      const values = {
+        name: $("teamName").value.trim(),
+        affiliation:
+          $("teamAffiliation").value.trim(),
+        specialty:
+          $("teamSpecialty").value.trim(),
+        group:
+          $("teamGroup").value.trim()
+      };
 
-    const next = normalize(members);
+      if (!values.name) return;
 
-    if (editId !== null) {
-      const member = next.find(m => m.id === editId);
+      const target = editId;
 
-      if (!member) {
-        status("لم يتم العثور على العضو", true);
-        return;
-      }
+      const success = await save(latest => {
+        if (target !== null) {
+          const member = latest.find(
+            x => x.id === target
+          );
 
-      Object.assign(member, values);
+          if (!member) {
+            throw new Error(
+              "العضو لم يعد موجودًا"
+            );
+          }
 
-    } else {
-      next.push({
-        id: Math.max(0, ...next.map(m => m.id)) + 1,
-        ...values
+          Object.assign(member, values);
+
+        } else {
+          latest.push({
+            id: Math.max(
+              0,
+              ...latest.map(x => x.id)
+            ) + 1,
+            ...values
+          });
+        }
+
+        return latest;
       });
-    }
 
-    const success = await persist(next);
-
-    if (success) {
-      form.classList.add("hidden");
+      if (success) {
+        form.classList.add("hidden");
+      }
     }
-  });
+  );
+
+  // Edit and delete
 
   $("teamCards").addEventListener(
     "click",
-    async event => {
-      const edit = event.target.closest("[data-edit]");
-      const del = event.target.closest("[data-delete]");
+    async e => {
+      const edit = e.target.closest(
+        "[data-edit]"
+      );
 
-      if (edit) {
-        startEdit(Number(edit.dataset.edit));
-        return;
+      const del = e.target.closest(
+        "[data-delete]"
+      );
+
+      if (edit && isAdmin()) {
+        startEdit(
+          Number(edit.dataset.edit)
+        );
       }
 
-      if (del && requireAdmin()) {
-        const id = Number(del.dataset.delete);
+      if (
+        del &&
+        isAdmin() &&
+        confirm(
+          "هل تريد حذف هذا العضو من فريق العمل؟"
+        )
+      ) {
+        const id = Number(
+          del.dataset.delete
+        );
 
-        if (!confirm("هل تريد حذف هذا العضو من فريق العمل؟")) {
-          return;
-        }
-
-        await persist(
-          members.filter(m => m.id !== id)
+        await save(latest =>
+          latest.filter(
+            member => member.id !== id
+          )
         );
       }
     }
   );
 
-  // ---------------------------------------------------------
-  // EXPORT
-  // ---------------------------------------------------------
+  // Export current Firebase team
 
-  $("teamExport").addEventListener("click", () => {
-    if (!loadedFromServer) {
-      status("انتظر تحميل البيانات أولاً", true);
-      return;
-    }
-
-    const blob = new Blob(
-      [JSON.stringify(members, null, 2)],
-      {
-        type: "application/json;charset=utf-8"
+  $("teamExport").addEventListener(
+    "click",
+    () => {
+      if (!ready) {
+        status(
+          "انتظر تحميل بيانات Firebase",
+          true
+        );
+        return;
       }
-    );
 
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
+      const blob = new Blob(
+        [
+          JSON.stringify(
+            members,
+            null,
+            2
+          )
+        ],
+        {
+          type:
+            "application/json;charset=utf-8"
+        }
+      );
 
-    anchor.href = url;
-    anchor.download = "central-lab-team.json";
-    anchor.click();
+      const url =
+        URL.createObjectURL(blob);
 
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  });
+      const link =
+        document.createElement("a");
 
-  // ---------------------------------------------------------
-  // IMPORT
-  // ---------------------------------------------------------
+      link.href = url;
+      link.download =
+        "central-lab-team.json";
+
+      link.click();
+
+      setTimeout(
+        () => URL.revokeObjectURL(url),
+        1000
+      );
+    }
+  );
+
+  // Import team: admin only, with confirmation
 
   $("teamImport").addEventListener(
     "change",
-    async event => {
-      const file = event.target.files?.[0];
+    async e => {
+      const file = e.target.files?.[0];
+
       if (!file) return;
 
       try {
-        if (!requireAdmin()) return;
-
-        const imported = JSON.parse(await file.text());
-
-        if (
-          !Array.isArray(imported) ||
-          !imported.every(
-            item => item &&
-            typeof item.name === "string"
-          )
-        ) {
-          throw Error("ملف JSON غير صحيح");
+        if (!isAdmin()) {
+          throw new Error(
+            "غير مصرح"
+          );
         }
 
-        if (!confirm(
-          "سيتم استبدال بيانات فريق العمل لجميع المستخدمين. هل أنت متأكد؟"
-        )) {
+        const data = JSON.parse(
+          await file.text()
+        );
+
+        if (
+          !Array.isArray(data) ||
+          !data.every(
+            x =>
+              x &&
+              typeof x.name === "string"
+          )
+        ) {
+          throw new Error(
+            "ملف غير صحيح"
+          );
+        }
+
+        if (
+          !confirm(
+            "سيتم استبدال قائمة الفريق لجميع المستخدمين. هل أنت متأكد؟"
+          )
+        ) {
           return;
         }
 
-        await persist(normalize(imported));
+        await save(
+          () => normalize(data)
+        );
 
       } catch (error) {
         status(
-          "تعذر الاستيراد: " + error.message,
+          "فشل الاستيراد: " +
+          error.message,
           true
         );
 
       } finally {
-        event.target.value = "";
+        e.target.value = "";
       }
     }
   );
 
-  // ---------------------------------------------------------
-  // STARTUP
-  // ---------------------------------------------------------
+  // Update permissions on login/logout
 
-  // إظهار الأيقونة فورًا لجميع المستخدمين.
-  updatePermissions();
-
-  // لا تعرض بيانات افتراضية على أنها بيانات Firebase.
-  members = [];
-  render();
-
-  // ابدأ الاستماع للتغييرات.
-  startSync();
-
-  // تحديث أدوات الإدارة عند تغير حالة تسجيل الدخول.
   window.addEventListener(
     "centralLabAuthChanged",
-    () => {
-      updatePermissions();
-      render();
-    }
+    permissions
   );
 
-  window.addEventListener("pagehide", () => {
-    if (typeof unsubscribe === "function") {
-      unsubscribe();
-    }
-  });
+  // Initial read-only view
 
-  // أدوات فحص آمنة
-  window.centralLabTeamStatus = () => ({
-    members: members.length,
-    synced: loadedFromServer,
-    admin: checkAdmin(),
-    saving
-  });
+  permissions();
+  render();
+
+  status(
+    "تُعرض نسخة احتياطية من 17 عضوًا مؤقتًا حتى الاتصال بـ Firebase"
+  );
+
+  // Firebase realtime synchronization
+
+  function connect(attempt = 0) {
+    if (
+      typeof window.centralLabSubscribe ===
+      "function"
+    ) {
+      window.centralLabSubscribe(
+        "team",
+
+        value => {
+          try {
+            members = parseValue(value);
+            ready = true;
+
+            render();
+
+            status(
+              `تمت مزامنة ${members.length} عضوًا من Firebase`
+            );
+
+          } catch (error) {
+            ready = false;
+            permissions();
+
+            status(
+              "تعذر قراءة بيانات Firebase: " +
+              error.message,
+              true
+            );
+          }
+        },
+
+        error => {
+          ready = false;
+          permissions();
+
+          status(
+            "تعذر الاتصال ببيانات الفريق: " +
+            (error.code || error.message),
+            true
+          );
+        }
+      );
+
+    } else if (attempt < 60) {
+      setTimeout(
+        () => connect(attempt + 1),
+        250
+      );
+
+    } else {
+      status(
+        "تعذر تحميل خدمة Firebase. المعروض نسخة احتياطية للقراءة فقط.",
+        true
+      );
+    }
+  }
+
+  connect();
 
 })();
