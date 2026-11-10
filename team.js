@@ -1,55 +1,11 @@
 
-(async () => {
+(() => {
   "use strict";
 
-  // =========================================================
-  // CENTRAL LAB — TEAM REAL-TIME SYNC
-  // Firebase Firestore / dashboard / team
-  // =========================================================
+  // CENTRAL LAB — TEAM MANAGEMENT
+  // Public viewing + Admin editing + Real-time sync
 
-  const FIREBASE_VERSION = "12.6.0";
-
-  const [
-    { initializeApp, getApps, getApp },
-    {
-      getFirestore, doc, getDocFromServer,
-      onSnapshot, setDoc, runTransaction,
-      serverTimestamp
-    },
-    { getAuth, onAuthStateChanged }
-  ] = await Promise.all([
-    import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`),
-    import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`),
-    import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-auth.js`)
-  ]);
-
-  // ضع إعدادات تطبيق Firebase الموجودة في مشروعك.
-  // لا تستخدم مشروعًا جديدًا.
-  const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "centrallabuniversity-of-tabuk.firebaseapp.com",
-    projectId: "centrallabuniversity-of-tabuk",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
-  };
-
-  if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-    console.error("أكمل إعدادات firebaseConfig أولاً");
-    return;
-  }
-
-  const app = getApps().length ? getApp() :
-    initializeApp(firebaseConfig);
-
-  if (app.options.projectId !== firebaseConfig.projectId) {
-    console.error("الموقع متصل بمشروع Firebase مختلف");
-    return;
-  }
-
-  const db = getFirestore(app);
-  const auth = getAuth(app);
-  const teamRef = doc(db, "dashboard", "team");
+  const STORAGE_KEY = "centralLabTeamMembersV1";
 
   const initial = [
     ["د. عائشة نواف البلوي", "كلية العلوم / الكيمياء"],
@@ -80,51 +36,56 @@
 
   const $ = id => document.getElementById(id);
 
-  const esc = s => String(s ?? "").replace(
-    /[&<>"']/g,
-    c => ({
+  const escapeHTML = value =>
+    String(value ?? "").replace(/[&<>"']/g, char => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
       '"': "&quot;",
       "'": "&#39;"
-    })[c]
-  );
+    })[char]);
 
-  const normalize = arr => arr.map((m, i) => ({
-    id: Number(m.id) || i + 1,
-    name: String(m.name || ""),
-    affiliation: String(m.affiliation || ""),
-    specialty: String(m.specialty || ""),
-    group: String(m.group || "")
-  })).filter(m => m.name.trim());
+  const normalize = arr => arr
+    .filter(m => m && typeof m.name === "string")
+    .map((m, i) => ({
+      id: Number(m.id) || i + 1,
+      name: m.name,
+      affiliation: String(m.affiliation || ""),
+      specialty: String(m.specialty || ""),
+      group: String(m.group || "")
+    }));
 
   let members = [];
   let editId = null;
-  let ready = false;
+  let isAdmin = false;
+  let loadedFromServer = false;
   let saving = false;
-  let currentUser = null;
   let unsubscribe = null;
-
-  // لا تستخدم localStorage بوصفه مصدر البيانات.
-  // القائمة الافتراضية لا تُحفظ تلقائيًا في Firebase.
 
   const modal = $("teamModal");
   const form = $("teamForm");
 
   if (!modal || !form) {
-    console.error("عناصر واجهة فريق العمل غير موجودة");
+    console.error("Team UI elements not found");
     return;
   }
 
-  function notify(message, error = false) {
-    console[error ? "error" : "info"](message);
+  // ---------------------------------------------------------
+  // STATUS
+  // ---------------------------------------------------------
+
+  function status(message, isError = false) {
+    console[isError ? "error" : "info"](
+      "[Team Sync]", message
+    );
 
     let el = $("teamSyncStatus");
+
     if (!el) {
       el = document.createElement("div");
       el.id = "teamSyncStatus";
       el.setAttribute("role", "status");
+
       el.style.cssText = `
         position:fixed;
         bottom:20px;
@@ -132,157 +93,259 @@
         z-index:99999;
         padding:12px 18px;
         border-radius:12px;
-        background:#12364d;
-        color:white;
-        font:14px Arial;
+        background:#153c55;
+        color:#fff;
+        font:14px Arial,sans-serif;
         box-shadow:0 5px 20px #0003;
+        max-width:350px;
       `;
+
       document.body.appendChild(el);
     }
 
     el.textContent = message;
-    el.style.background = error ? "#9b2424" : "#12364d";
+    el.style.background = isError
+      ? "#a12626"
+      : "#153c55";
   }
 
-  function requireReady() {
-    if (!ready) {
-      notify("انتظر تحميل بيانات Firebase", true);
+  // ---------------------------------------------------------
+  // PERMISSIONS
+  // ---------------------------------------------------------
+
+  function checkAdmin() {
+    // يجب أن تأتي هذه القيمة من نظام الإدارة الفعلي.
+    // لا تستخدم localStorage لإثبات صلاحية المدير.
+    return window.centralLabIsAdmin?.() === true;
+  }
+
+  function updatePermissions() {
+    isAdmin = checkAdmin();
+
+    const nav = $("teamNavBtn");
+
+    if (nav) {
+      nav.hidden = false;
+      nav.disabled = false;
+      nav.style.display = "";
+      nav.removeAttribute("aria-disabled");
+    }
+
+    const adminIds = [
+      "teamAdd",
+      "teamImport"
+    ];
+
+    adminIds.forEach(id => {
+      const element = $(id);
+      if (element) element.hidden = !isAdmin;
+    });
+
+    const importLabel = $("teamImport")?.closest("label");
+    if (importLabel) {
+      importLabel.hidden = !isAdmin;
+    }
+
+    document.querySelectorAll(
+      "#teamCards [data-edit], #teamCards [data-delete]"
+    ).forEach(button => {
+      button.hidden = !isAdmin;
+    });
+
+    if (!isAdmin) {
+      form.classList.add("hidden");
+    }
+  }
+
+  function requireAdmin() {
+    updatePermissions();
+
+    if (!isAdmin) {
+      status("هذه العملية متاحة لمدير النظام فقط", true);
       return false;
     }
+
+    if (!loadedFromServer) {
+      status("انتظر تحميل البيانات من Firebase", true);
+      return false;
+    }
+
+    if (saving) return false;
+
     return true;
   }
 
-  function requireEditor() {
-    if (!requireReady()) return false;
+  // ---------------------------------------------------------
+  // HELPERS
+  // ---------------------------------------------------------
 
-    if (!currentUser) {
-      notify("يجب تسجيل الدخول للتعديل", true);
-      return false;
-    }
-
-    // صلاحية الكتابة النهائية تتحكم بها Firestore Rules.
-    return true;
-  }
-
-  function uniq(key) {
+  function unique(key) {
     return [...new Set(
-      members.map(m => m[key].trim()).filter(Boolean)
+      members
+        .map(m => m[key].trim())
+        .filter(Boolean)
     )].sort((a, b) => a.localeCompare(b, "ar"));
   }
 
   function initials(name) {
-    const parts = name.replace(
-      /^(د\.|أ\.د\.|أ\.|Dr\.)\s*/i, ""
-    ).trim().split(/\s+/);
+    const parts = name
+      .replace(/^(د\.|أ\.د\.|أ\.|Dr\.)\s*/i, "")
+      .trim()
+      .split(/\s+/);
 
     return parts.length > 1
       ? parts[0][0] + parts[1][0]
       : parts[0]?.slice(0, 2) || "؟";
   }
 
+  // ---------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------
+
   function render() {
-    const search = $("teamSearch")?.value.trim().toLowerCase() || "";
-    const group = $("teamGroupFilter")?.value || "";
-    const spec = $("teamSpecialtyFilter")?.value || "";
+    const search = $("teamSearch").value
+      .trim()
+      .toLocaleLowerCase();
 
-    const groups = uniq("group");
-    const specs = uniq("specialty");
+    const group = $("teamGroupFilter").value;
+    const specialty = $("teamSpecialtyFilter").value;
 
-    function updateSelect(id, values, title, selected) {
-      const el = $(id);
-      if (!el) return;
+    const groups = unique("group");
+    const specialties = unique("specialty");
 
-      el.innerHTML =
+    function fillSelect(id, title, values, previous) {
+      const select = $(id);
+
+      select.innerHTML =
         `<option value="">${title}</option>` +
-        values.map(x =>
-          `<option value="${esc(x)}">${esc(x)}</option>`
+        values.map(value =>
+          `<option value="${escapeHTML(value)}">
+            ${escapeHTML(value)}
+          </option>`
         ).join("");
 
-      el.value = values.includes(selected) ? selected : "";
+      select.value = values.includes(previous)
+        ? previous
+        : "";
     }
 
-    updateSelect(
-      "teamGroupFilter", groups, "كل المجموعات", group
+    fillSelect(
+      "teamGroupFilter",
+      "كل المجموعات",
+      groups,
+      group
     );
 
-    updateSelect(
-      "teamSpecialtyFilter", specs, "كل التخصصات", spec
+    fillSelect(
+      "teamSpecialtyFilter",
+      "كل التخصصات",
+      specialties,
+      specialty
     );
 
     $("teamGroupSuggestions").innerHTML =
-      groups.map(x =>
-        `<option value="${esc(x)}"></option>`
+      groups.map(value =>
+        `<option value="${escapeHTML(value)}"></option>`
       ).join("");
 
     $("teamSpecialtySuggestions").innerHTML =
-      specs.map(x =>
-        `<option value="${esc(x)}"></option>`
+      specialties.map(value =>
+        `<option value="${escapeHTML(value)}"></option>`
       ).join("");
 
     let shown = members.filter(m =>
       (!group || m.group === group) &&
-      (!spec || m.specialty === spec) &&
+      (!specialty || m.specialty === specialty) &&
       [
-        m.name, m.affiliation, m.specialty, m.group
-      ].some(v => v.toLowerCase().includes(search))
+        m.name,
+        m.affiliation,
+        m.specialty,
+        m.group
+      ].some(value =>
+        value.toLocaleLowerCase().includes(search)
+      )
     );
 
-    const sort = $("teamSort")?.value;
+    const sort = $("teamSort").value;
 
     if (sort === "name") {
-      shown.sort((a, b) => a.name.localeCompare(b.name, "ar"));
+      shown.sort((a, b) =>
+        a.name.localeCompare(b.name, "ar")
+      );
     }
 
     if (sort === "group") {
-      shown.sort((a, b) => a.group.localeCompare(b.group, "ar"));
+      shown.sort((a, b) =>
+        a.group.localeCompare(b.group, "ar")
+      );
     }
 
     $("teamCount").textContent = members.length;
     $("teamHeaderCount").textContent = members.length;
     $("teamShown").textContent = shown.length;
     $("teamGroupsCount").textContent = groups.length;
-    $("teamSpecialtiesCount").textContent = specs.length;
+    $("teamSpecialtiesCount").textContent = specialties.length;
 
     $("teamCards").innerHTML = shown.map(m => {
       const icon = window.teamSpecialtyIcon?.(m);
 
       return `
         <article class="team-card">
-          <div class="team-avatar team-avatar--${esc(icon?.key || "general")}"
-               title="${esc(m.specialty || m.affiliation)}"
-               aria-hidden="true">
-            ${icon?.html || esc(initials(m.name))}
+
+          <div
+            class="team-avatar team-avatar--${escapeHTML(icon?.key || "general")}"
+            title="${escapeHTML(m.specialty || m.affiliation)}"
+            aria-hidden="true"
+          >
+            ${icon?.html || escapeHTML(initials(m.name))}
           </div>
 
           <div class="team-info">
+
             <div class="team-person-line">
-              <strong>${esc(m.name)}</strong>
+              <strong>${escapeHTML(m.name)}</strong>
+
               <span class="team-number">
                 ${String(members.indexOf(m) + 1).padStart(2, "0")}
               </span>
             </div>
 
-            <small>${esc(m.affiliation) || "الجهة غير محددة"}</small>
+            <small>
+              ${escapeHTML(m.affiliation) || "الجهة غير محددة"}
+            </small>
 
             <div class="team-tags">
+
               <span class="team-tag ${m.specialty ? "" : "team-unset"}">
-                ◈ ${esc(m.specialty) || "إضافة التخصص"}
+                ◈ ${escapeHTML(m.specialty) || "إضافة التخصص"}
               </span>
 
               <span class="team-tag gold ${m.group ? "" : "team-unset"}">
-                ♧ ${esc(m.group) || "إضافة مجموعة العمل"}
+                ♧ ${escapeHTML(m.group) || "إضافة مجموعة العمل"}
               </span>
+
             </div>
           </div>
 
-          <div class="team-actions">
-            <button type="button" data-edit="${m.id}">
+          <div class="team-actions" ${isAdmin ? "" : "hidden"}>
+
+            <button
+              type="button"
+              data-edit="${m.id}"
+              ${isAdmin ? "" : "hidden"}
+            >
               ✎ تعديل
             </button>
-            <button type="button" class="team-delete"
-                    data-delete="${m.id}">
+
+            <button
+              type="button"
+              class="team-delete"
+              data-delete="${m.id}"
+              ${isAdmin ? "" : "hidden"}
+            >
               حذف
             </button>
+
           </div>
         </article>
       `;
@@ -292,150 +355,167 @@
         <p>جرّب تغيير كلمات البحث أو عوامل التصفية.</p>
       </div>
     `;
+
+    updatePermissions();
   }
+
+  // ---------------------------------------------------------
+  // MODAL
+  // ---------------------------------------------------------
 
   function open() {
     modal.classList.remove("hidden");
     document.body.classList.add("team-modal-open");
-    $("teamNavBtn").setAttribute("aria-expanded", "true");
+
+    $("teamNavBtn").setAttribute(
+      "aria-expanded",
+      "true"
+    );
+
     render();
   }
 
   function close() {
     modal.classList.add("hidden");
     document.body.classList.remove("team-modal-open");
-    $("teamNavBtn").setAttribute("aria-expanded", "false");
+
+    $("teamNavBtn").setAttribute(
+      "aria-expanded",
+      "false"
+    );
+
     form.classList.add("hidden");
   }
 
   function startEdit(id) {
-    if (!requireEditor()) return;
+    if (!requireAdmin()) return;
 
     editId = id;
-    const m = members.find(x => x.id === id);
 
-    $("teamFormTitle").textContent =
-      m ? "تعديل بيانات العضو" : "إضافة عضو جديد";
+    const member = members.find(m => m.id === id);
 
-    $("teamName").value = m?.name || "";
-    $("teamAffiliation").value = m?.affiliation || "";
-    $("teamSpecialty").value = m?.specialty || "";
-    $("teamGroup").value = m?.group || "";
+    $("teamFormTitle").textContent = member
+      ? "تعديل بيانات العضو"
+      : "إضافة عضو جديد";
+
+    $("teamName").value = member?.name || "";
+    $("teamAffiliation").value = member?.affiliation || "";
+    $("teamSpecialty").value = member?.specialty || "";
+    $("teamGroup").value = member?.group || "";
 
     form.classList.remove("hidden");
+
     form.scrollIntoView({
       behavior: "smooth",
       block: "nearest"
     });
+
     $("teamName").focus();
   }
 
-  // =========================================================
-  // FIREBASE REAL-TIME LISTENER
-  // =========================================================
+  // ---------------------------------------------------------
+  // REAL-TIME DATA
+  // ---------------------------------------------------------
 
-  function startRealtimeSync() {
+  function applyRemoteData(data) {
+    let parsed = data;
+
+    // dashboard/team -> value
+    if (
+      parsed &&
+      !Array.isArray(parsed) &&
+      typeof parsed === "object"
+    ) {
+      parsed = parsed.value ?? parsed;
+    }
+
+    if (typeof parsed === "string") {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (error) {
+        status("تعذر قراءة بيانات فريق العمل", true);
+        return;
+      }
+    }
+
+    if (!Array.isArray(parsed)) {
+      status("صيغة بيانات الفريق غير صحيحة", true);
+      return;
+    }
+
+    members = normalize(parsed);
+    loadedFromServer = true;
+
+    render();
+    status("تمت مزامنة بيانات فريق العمل");
+  }
+
+  function startSync() {
+    if (typeof window.centralLabSubscribe !== "function") {
+      status(
+        "مستمع Firebase غير متاح. يلزم ربط centralLabSubscribe.",
+        true
+      );
+      return;
+    }
+
     if (unsubscribe) unsubscribe();
 
-    notify("جارٍ الاتصال ببيانات فريق العمل...");
-
-    unsubscribe = onSnapshot(
-      teamRef,
-      { includeMetadataChanges: true },
-      snapshot => {
-        if (snapshot.metadata.fromCache) {
-          notify("البيانات من الذاكرة المؤقتة؛ جارٍ انتظار الخادم");
-          return;
-        }
-
-        const data = snapshot.data();
-
-        if (!snapshot.exists()) {
-          ready = true;
-          members = [];
-          render();
-          notify("مستند الفريق غير موجود؛ لم يتم إنشاء بيانات تلقائيًا");
-          return;
-        }
-
-        if (!Array.isArray(data.members)) {
-          ready = false;
-          notify(
-            "مستند team موجود لكن حقل members غير صحيح",
-            true
-          );
-          return;
-        }
-
-        members = normalize(data.members);
-        ready = true;
-        render();
-
-        notify(
-          snapshot.metadata.hasPendingWrites
-            ? "جارٍ إرسال التغييرات..."
-            : "تمت مزامنة فريق العمل مع Firebase"
-        );
-      },
+    // يجب أن تستمع الدالة إلى dashboard/team
+    // وتعمل للزوار دون اشتراط تسجيل الدخول.
+    unsubscribe = window.centralLabSubscribe(
+      "team",
+      applyRemoteData,
       error => {
-        ready = false;
-        notify(
-          `فشل استقبال البيانات: ${error.code || error.message}`,
+        loadedFromServer = false;
+        status(
+          "فشل الاتصال ببيانات Firebase: " +
+          (error?.message || error),
           true
         );
       }
     );
   }
 
-  // =========================================================
-  // FIREBASE SAVE WITH TRANSACTION
-  // =========================================================
+  // ---------------------------------------------------------
+  // SAVE
+  // ---------------------------------------------------------
 
-  async function saveChange(change) {
-    if (!requireEditor() || saving) return false;
+  async function persist(nextMembers) {
+    if (!requireAdmin()) return false;
+
+    if (typeof window.centralLabSave !== "function") {
+      status("دالة حفظ Firebase غير متاحة", true);
+      return false;
+    }
 
     saving = true;
 
     try {
-      await runTransaction(db, async transaction => {
-        const snapshot = await transaction.get(teamRef);
+      const normalized = normalize(nextMembers);
 
-        if (!snapshot.exists()) {
-          throw Error(
-            "مستند الفريق غير موجود. يجب تهيئته أولاً."
-          );
-        }
+      // يجب أن تحفظ centralLabSave القيمة في:
+      // dashboard/team -> value
+      await window.centralLabSave(
+        STORAGE_KEY,
+        JSON.stringify(normalized),
+        "تعديل بيانات فريق العمل"
+      );
 
-        const data = snapshot.data();
+      // لا نغيّر البيانات المحلية إلا بعد نجاح الحفظ.
+      members = normalized;
+      render();
 
-        if (!Array.isArray(data.members)) {
-          throw Error("صيغة بيانات الفريق غير صحيحة");
-        }
-
-        const latest = normalize(data.members);
-        const updated = change(latest);
-
-        if (!Array.isArray(updated)) {
-          throw Error("عملية تعديل غير صحيحة");
-        }
-
-        transaction.update(teamRef, {
-          members: normalize(updated),
-          updatedAt: serverTimestamp(),
-          updatedBy: currentUser.uid,
-          updatedByEmail: currentUser.email || ""
-        });
-      });
-
-      notify("تم حفظ التعديل ومزامنته بنجاح");
+      status("تم حفظ التغييرات في Firebase");
       return true;
 
     } catch (error) {
-      console.error("Firebase save error:", error);
-      notify(
-        `فشل الحفظ: ${error.code || error.message}`,
+      status(
+        "فشل حفظ التعديلات: " +
+        (error?.message || error),
         true
       );
+
       return false;
 
     } finally {
@@ -443,46 +523,54 @@
     }
   }
 
-  // =========================================================
+  // ---------------------------------------------------------
   // EVENTS
-  // =========================================================
+  // ---------------------------------------------------------
 
   $("teamNavBtn").addEventListener("click", open);
+
   $("teamClose").addEventListener("click", close);
 
-  modal.addEventListener("click", e => {
-    if (e.target === modal) close();
+  modal.addEventListener("click", event => {
+    if (event.target === modal) close();
   });
 
-  document.addEventListener("keydown", e => {
+  document.addEventListener("keydown", event => {
     if (
-      e.key === "Escape" &&
+      event.key === "Escape" &&
       !modal.classList.contains("hidden")
-    ) close();
+    ) {
+      close();
+    }
   });
 
-  $("teamAdd").addEventListener("click", () => startEdit(null));
+  $("teamAdd").addEventListener(
+    "click",
+    () => startEdit(null)
+  );
 
-  for (const id of ["teamCancel", "teamCancelBottom"]) {
+  ["teamCancel", "teamCancelBottom"].forEach(id => {
     $(id).addEventListener("click", () => {
       form.classList.add("hidden");
     });
-  }
+  });
 
-  for (const id of [
+  [
     "teamSearch",
     "teamGroupFilter",
     "teamSpecialtyFilter",
     "teamSort"
-  ]) {
+  ].forEach(id => {
     $(id).addEventListener(
       id === "teamSearch" ? "input" : "change",
       render
     );
-  }
+  });
 
-  form.addEventListener("submit", async e => {
-    e.preventDefault();
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+
+    if (!requireAdmin()) return;
 
     const values = {
       name: $("teamName").value.trim(),
@@ -493,160 +581,164 @@
 
     if (!values.name) return;
 
-    const targetId = editId;
+    const next = normalize(members);
 
-    const success = await saveChange(latest => {
-      if (targetId !== null) {
-        const member = latest.find(x => x.id === targetId);
+    if (editId !== null) {
+      const member = next.find(m => m.id === editId);
 
-        if (!member) {
-          throw Error("العضو لم يعد موجودًا في قاعدة البيانات");
-        }
-
-        Object.assign(member, values);
-      } else {
-        latest.push({
-          id: Math.max(0, ...latest.map(x => x.id)) + 1,
-          ...values
-        });
+      if (!member) {
+        status("لم يتم العثور على العضو", true);
+        return;
       }
 
-      return latest;
-    });
+      Object.assign(member, values);
+
+    } else {
+      next.push({
+        id: Math.max(0, ...next.map(m => m.id)) + 1,
+        ...values
+      });
+    }
+
+    const success = await persist(next);
 
     if (success) {
       form.classList.add("hidden");
     }
   });
 
-  $("teamCards").addEventListener("click", async e => {
-    const edit = e.target.closest("[data-edit]");
-    const del = e.target.closest("[data-delete]");
+  $("teamCards").addEventListener(
+    "click",
+    async event => {
+      const edit = event.target.closest("[data-edit]");
+      const del = event.target.closest("[data-delete]");
 
-    if (edit) {
-      startEdit(Number(edit.dataset.edit));
-      return;
-    }
-
-    if (del && requireEditor()) {
-      const id = Number(del.dataset.delete);
-
-      if (!confirm("هل تريد حذف هذا العضو من فريق العمل؟")) {
+      if (edit) {
+        startEdit(Number(edit.dataset.edit));
         return;
       }
 
-      await saveChange(latest =>
-        latest.filter(m => m.id !== id)
-      );
+      if (del && requireAdmin()) {
+        const id = Number(del.dataset.delete);
+
+        if (!confirm("هل تريد حذف هذا العضو من فريق العمل؟")) {
+          return;
+        }
+
+        await persist(
+          members.filter(m => m.id !== id)
+        );
+      }
     }
-  });
+  );
+
+  // ---------------------------------------------------------
+  // EXPORT
+  // ---------------------------------------------------------
 
   $("teamExport").addEventListener("click", () => {
-    if (!requireReady()) return;
+    if (!loadedFromServer) {
+      status("انتظر تحميل البيانات أولاً", true);
+      return;
+    }
 
     const blob = new Blob(
       [JSON.stringify(members, null, 2)],
-      { type: "application/json;charset=utf-8" }
+      {
+        type: "application/json;charset=utf-8"
+      }
     );
 
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const anchor = document.createElement("a");
 
-    a.href = url;
-    a.download = "central-lab-team.json";
-    a.click();
+    anchor.href = url;
+    anchor.download = "central-lab-team.json";
+    anchor.click();
 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 
-  $("teamImport").addEventListener("change", async e => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ---------------------------------------------------------
+  // IMPORT
+  // ---------------------------------------------------------
 
-    try {
-      if (!requireEditor()) return;
+  $("teamImport").addEventListener(
+    "change",
+    async event => {
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-      const arr = JSON.parse(await file.text());
+      try {
+        if (!requireAdmin()) return;
 
-      if (
-        !Array.isArray(arr) ||
-        !arr.every(x => x && typeof x.name === "string")
-      ) {
-        throw Error("ملف JSON غير صحيح");
+        const imported = JSON.parse(await file.text());
+
+        if (
+          !Array.isArray(imported) ||
+          !imported.every(
+            item => item &&
+            typeof item.name === "string"
+          )
+        ) {
+          throw Error("ملف JSON غير صحيح");
+        }
+
+        if (!confirm(
+          "سيتم استبدال بيانات فريق العمل لجميع المستخدمين. هل أنت متأكد؟"
+        )) {
+          return;
+        }
+
+        await persist(normalize(imported));
+
+      } catch (error) {
+        status(
+          "تعذر الاستيراد: " + error.message,
+          true
+        );
+
+      } finally {
+        event.target.value = "";
       }
-
-      if (!confirm(
-        "سيتم استبدال بيانات الفريق في Firebase لجميع المستخدمين. هل أنت متأكد؟"
-      )) return;
-
-      const imported = normalize(arr);
-
-      await saveChange(() => imported);
-
-    } catch (error) {
-      notify(`تعذر الاستيراد: ${error.message}`, true);
-
-    } finally {
-      e.target.value = "";
     }
-  });
+  );
 
-  // =========================================================
-  // FIRST-TIME INITIALIZATION — MANUAL ONLY
-  // =========================================================
+  // ---------------------------------------------------------
+  // STARTUP
+  // ---------------------------------------------------------
 
-  // لا تستدعِ هذه الدالة تلقائيًا.
-  // استخدامها فقط عندما لا يوجد مستند team،
-  // وبعد التأكد من عدم وجود بيانات محفوظة سابقًا.
+  // إظهار الأيقونة فورًا لجميع المستخدمين.
+  updatePermissions();
 
-  window.centralLabInitializeTeam = async function () {
-    if (!currentUser) {
-      throw Error("يجب تسجيل الدخول");
+  // لا تعرض بيانات افتراضية على أنها بيانات Firebase.
+  members = [];
+  render();
+
+  // ابدأ الاستماع للتغييرات.
+  startSync();
+
+  // تحديث أدوات الإدارة عند تغير حالة تسجيل الدخول.
+  window.addEventListener(
+    "centralLabAuthChanged",
+    () => {
+      updatePermissions();
+      render();
     }
-
-    const existing = await getDocFromServer(teamRef);
-
-    if (existing.exists()) {
-      throw Error("مستند team موجود بالفعل؛ لن تتم الكتابة فوقه");
-    }
-
-    if (!confirm(
-      "إنشاء قائمة الفريق الافتراضية في Firebase لأول مرة؟"
-    )) return;
-
-    // الإنشاء مشروط بعدم وجود المستند لحظة المعاملة.
-    await runTransaction(db, async transaction => {
-      const check = await transaction.get(teamRef);
-
-      if (check.exists()) {
-        throw Error("تم إنشاء المستند من جهاز آخر");
-      }
-
-      transaction.set(teamRef, {
-        members: initial,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser.uid
-      });
-    });
-  };
-
-  // =========================================================
-  // AUTHENTICATION + STARTUP
-  // =========================================================
-
-  onAuthStateChanged(auth, user => {
-    currentUser = user;
-    console.info(
-      "Firebase auth:",
-      user ? user.email : "Guest"
-    );
-  });
-
-  startRealtimeSync();
+  );
 
   window.addEventListener("pagehide", () => {
-    if (unsubscribe) unsubscribe();
+    if (typeof unsubscribe === "function") {
+      unsubscribe();
+    }
+  });
+
+  // أدوات فحص آمنة
+  window.centralLabTeamStatus = () => ({
+    members: members.length,
+    synced: loadedFromServer,
+    admin: checkAdmin(),
+    saving
   });
 
 })();
