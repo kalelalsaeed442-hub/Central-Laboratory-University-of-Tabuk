@@ -1,149 +1,385 @@
 
-/* Firebase-backed administration */
+/*
+ * CENTRAL LABORATORY — UNIVERSITY OF TABUK
+ * firebase-admin.js
+ *
+ * Firebase Authentication + Firestore
+ * Public realtime team synchronization
+ * Admin-only team editing
+ * Dashboard administration
+ *
+ * Firestore:
+ *   dashboard/team
+ *   dashboard/labs
+ *   users/{uid}
+ *   auditLogs/{id}
+ */
+
 (async () => {
-  'use strict';
+  "use strict";
 
   const config = {
-    apiKey: 'AIzaSyDtr0qH-_87XYw26_b2wMjXaIhJC--9xbs',
-    authDomain: 'centrallabuniversity-of-tabuk.firebaseapp.com',
-    projectId: 'centrallabuniversity-of-tabuk',
-    appId: '1:833984703398:web:fdb2e3de00e403340abd67'
+    apiKey: "AIzaSyDtr0qH-_87XYw26_b2wMjXaIhJC--9xbs",
+    authDomain: "centrallabuniversity-of-tabuk.firebaseapp.com",
+    projectId: "centrallabuniversity-of-tabuk",
+    appId: "1:833984703398:web:fdb2e3de00e403340abd67"
   };
 
-  const ROOT = 'zPzvmsBu9GTbQTc0njW62lOplr93';
+  const ROOT = "zPzvmsBu9GTbQTc0njW62lOplr93";
 
   const KEYS = {
-    centralLabsDigitalTwinData: 'labs',
-    centralLabTeamMembersV1: 'team'
+    centralLabsDigitalTwinData: "labs",
+    centralLabTeamMembersV1: "team"
   };
 
-  const [
-    { initializeApp, deleteApp },
-    {
-      getAuth,
-      signInWithEmailAndPassword,
-      signOut,
-      onAuthStateChanged,
-      createUserWithEmailAndPassword
-    },
-    {
-      getFirestore,
-      doc,
-      getDoc,
-      getDocs,
-      setDoc,
-      collection,
-      addDoc,
-      onSnapshot,
-      query,
-      orderBy,
-      limit,
-      serverTimestamp,
-      runTransaction
-    }
-  ] = await Promise.all([
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js')
-  ]);
-
-  const app = initializeApp(config);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+  const WELCOME_KEY = "centralLabWelcomeShown";
 
   const $ = id => document.getElementById(id);
 
-  const esc = s => String(s ?? '').replace(
+  const esc = value => String(value ?? "").replace(
     /[&<>"']/g,
     c => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
     }[c])
   );
 
+  // Public interfaces are registered immediately,
+  // so team.js can find them even while Firebase loads.
+
+  let firebaseReady = false;
   let user = null;
   let profile = null;
-  let unsubs = [];
   let authVersion = 0;
   let loginInProgress = false;
 
-  const WELCOME_KEY = 'centralLabWelcomeShown';
+  let auth = null;
+  let db = null;
 
-  const overlay = document.createElement('div');
-  overlay.id = 'adminOverlay';
-  overlay.className = 'admin-overlay';
-  overlay.style.display = 'none';
-  document.body.append(overlay);
+  let firestoreAPI = null;
+  let authAPI = null;
+  let appAPI = null;
+
+  const listeners = new Map();
+  const snapshots = new Map();
+  const callbacks = new Map();
+
+  let labsUnsubscribe = null;
+
+  function admin() {
+    return !!user && user.uid === ROOT;
+  }
+
+  function editor() {
+    return !!user && (
+      admin() || profile?.role === "editor"
+    );
+  }
+
+  function canEditDocument(id) {
+    if (id === "team") return admin();
+    return editor();
+  }
+
+  function displayName() {
+    return profile?.name || user?.email || "مستخدم";
+  }
+
+  function message(err) {
+    const errors = {
+      "auth/invalid-credential": "بيانات الدخول غير صحيحة",
+      "auth/email-already-in-use": "البريد مستخدم بالفعل",
+      "auth/weak-password": "كلمة المرور ضعيفة",
+      "permission-denied": "لا توجد صلاحية لإجراء العملية",
+      "unavailable": "تعذر الاتصال بخدمة Firebase"
+    };
+
+    return errors[err?.code] ||
+      err?.message ||
+      "تعذرت العملية";
+  }
+
+  window.centralLabIsAdmin = () => admin();
+  window.centralLabIsEditor = () => editor();
+
+  function notifyAuth() {
+    window.dispatchEvent(
+      new CustomEvent("centralLabAuthChanged", {
+        detail: {
+          authenticated: !!user,
+          admin: admin(),
+          editor: editor()
+        }
+      })
+    );
+  }
+
+  function notifySubscribers(id, value) {
+    const registered = callbacks.get(id);
+
+    if (!registered) return;
+
+    for (const item of registered) {
+      try {
+        item.callback(value);
+      } catch (err) {
+        console.error(
+          "Team rendering callback error:",
+          err
+        );
+      }
+    }
+  }
+
+  function notifyErrors(id, error) {
+    const registered = callbacks.get(id);
+
+    if (!registered) return;
+
+    for (const item of registered) {
+      try {
+        item.onError?.(error);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+
+  function startListener(id) {
+    if (!firebaseReady || listeners.has(id)) {
+      return;
+    }
+
+    const {
+      doc,
+      onSnapshot
+    } = firestoreAPI;
+
+    const unsubscribe = onSnapshot(
+      doc(db, "dashboard", id),
+
+      snapshot => {
+        if (!snapshot.exists()) {
+          notifyErrors(
+            id,
+            new Error(
+              "مستند dashboard/" + id + " غير موجود"
+            )
+          );
+          return;
+        }
+
+        const data = snapshot.data();
+
+        if (!Object.prototype.hasOwnProperty.call(
+          data,
+          "value"
+        )) {
+          notifyErrors(
+            id,
+            new Error("الحقل value غير موجود")
+          );
+          return;
+        }
+
+        const value = data.value;
+
+        snapshots.set(id, value);
+
+        const key = Object.keys(KEYS).find(
+          k => KEYS[k] === id
+        );
+
+        if (key) {
+          try {
+            localStorage.setItem(
+              key,
+              JSON.stringify(value)
+            );
+          } catch (err) {
+            console.warn(
+              "Local cache unavailable:",
+              err
+            );
+          }
+        }
+
+        notifySubscribers(id, value);
+
+        console.info(
+          "Firebase data synchronized:",
+          id
+        );
+      },
+
+      error => {
+        console.error(
+          "Firebase listener error:",
+          id,
+          error
+        );
+
+        listeners.delete(id);
+        notifyErrors(id, error);
+      }
+    );
+
+    listeners.set(id, unsubscribe);
+  }
+
+  /*
+   * Compatible with:
+   *
+   * centralLabSubscribe(
+   *   "team",
+   *   value => render(value),
+   *   error => showError(error)
+   * )
+   *
+   * Also accepts:
+   * centralLabSubscribe("centralLabTeamMembersV1", ...)
+   */
+
+  window.centralLabSubscribe = (
+    requestedId,
+    callback,
+    onError
+  ) => {
+    const id = KEYS[requestedId] || requestedId;
+
+    if (!["team", "labs"].includes(id)) {
+      throw new Error(
+        "Unknown dashboard document: " + id
+      );
+    }
+
+    if (typeof callback !== "function") {
+      throw new TypeError(
+        "Subscription callback must be a function"
+      );
+    }
+
+    const item = { callback, onError };
+
+    if (!callbacks.has(id)) {
+      callbacks.set(id, new Set());
+    }
+
+    callbacks.get(id).add(item);
+
+    if (snapshots.has(id)) {
+      try {
+        callback(snapshots.get(id));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    startListener(id);
+
+    return () => {
+      callbacks.get(id)?.delete(item);
+
+      if (
+        callbacks.get(id)?.size === 0 &&
+        id !== "team"
+      ) {
+        listeners.get(id)?.();
+        listeners.delete(id);
+      }
+    };
+  };
+
+  // Public team listener remains active without login.
+
+  function startPublicSynchronization() {
+    startListener("team");
+  }
+
+  function startPrivateSynchronization() {
+    if (!user) {
+      if (labsUnsubscribe) {
+        labsUnsubscribe();
+        labsUnsubscribe = null;
+      }
+
+      return;
+    }
+
+    startListener("labs");
+  }
+
+  // Overlay for authentication and administration.
+
+  const overlay = document.createElement("div");
+  overlay.id = "adminOverlay";
+  overlay.className = "admin-overlay";
+  overlay.style.display = "none";
+
+  document.body.appendChild(overlay);
 
   function show(html) {
     overlay.innerHTML =
       '<section class="admin-panel" role="dialog" aria-modal="true">' +
       html +
-      '</section>';
+      "</section>";
 
-    overlay.style.display = 'flex';
+    overlay.style.display = "flex";
   }
 
   function hide() {
-    overlay.style.display = 'none';
-  }
-
-  function message(err) {
-    return ({
-      'auth/invalid-credential': 'بيانات الدخول غير صحيحة',
-      'auth/email-already-in-use': 'البريد مستخدم بالفعل',
-      'auth/weak-password': 'كلمة المرور ضعيفة',
-      'permission-denied': 'لا توجد صلاحية لإجراء هذه العملية'
-    }[err?.code] || err?.message || 'تعذرت العملية');
-  }
-
-  function displayName() {
-    return profile?.name || user?.email || 'مستخدم';
-  }
-
-  function admin() {
-    return user?.uid === ROOT;
-  }
-
-  function editor() {
-    return !!user && (
-      admin() || profile?.role === 'editor'
-    );
+    overlay.style.display = "none";
   }
 
   function updateButtons() {
+    const dashboardEditor = editor();
+    const teamAdmin = admin();
+
     document.querySelectorAll(
-      '#editBtn,#teamAdd,#teamImport,#importFile,#reset'
+      "#editBtn,#importFile,#reset"
     ).forEach(el => {
-      el.disabled = !editor();
-      el.title = editor()
-        ? ''
-        : 'يتطلب تسجيل الدخول بصلاحية التعديل';
+      el.disabled = !dashboardEditor;
+      el.title = dashboardEditor
+        ? ""
+        : "يتطلب صلاحية التعديل";
     });
 
     document.querySelectorAll(
-      '#teamCards [data-edit],#teamCards [data-delete]'
+      "#teamAdd,#teamImport"
     ).forEach(el => {
-      el.disabled = !editor();
+      el.disabled = !teamAdmin;
+      el.hidden = !teamAdmin;
+      el.style.display = teamAdmin ? "" : "none";
     });
+
+    document.querySelectorAll(
+      "#teamCards [data-edit],#teamCards [data-delete]"
+    ).forEach(el => {
+      el.disabled = !teamAdmin;
+      el.hidden = !teamAdmin;
+      el.style.display = teamAdmin ? "" : "none";
+    });
+
+    notifyAuth();
   }
 
-  // Welcome is displayed only after an explicit login.
   function welcome() {
     if (!user) return;
 
-    const welcomeId = user.uid;
-
     if (
-      sessionStorage.getItem(WELCOME_KEY) === welcomeId
+      sessionStorage.getItem(WELCOME_KEY) ===
+      user.uid
     ) {
       return;
     }
 
-    sessionStorage.setItem(WELCOME_KEY, welcomeId);
+    sessionStorage.setItem(
+      WELCOME_KEY,
+      user.uid
+    );
 
     show(`
       <h2>مرحبًا بك، ${esc(displayName())}</h2>
@@ -158,10 +394,10 @@
         <b>
           ${
             admin()
-              ? 'مدير النظام'
+              ? "مدير النظام"
               : editor()
-                ? 'محرر'
-                : 'مشاهد'
+                ? "محرر"
+                : "مشاهد"
           }
         </b>
       </p>
@@ -186,15 +422,15 @@
                 إدارة النظام
               </button>
             `
-            : ''
+            : ""
         }
       </div>
     `);
 
-    $('adminContinue').onclick = hide;
+    $("adminContinue").onclick = hide;
 
     if (admin()) {
-      $('adminManage').onclick = manage;
+      $("adminManage").onclick = manage;
     }
   }
 
@@ -232,7 +468,10 @@
         ></p>
 
         <div class="admin-actions">
-          <button class="admin-primary" type="submit">
+          <button
+            class="admin-primary"
+            type="submit"
+          >
             دخول
           </button>
 
@@ -247,60 +486,90 @@
       </form>
     `);
 
-    $('fbCancel').onclick = hide;
+    $("fbCancel").onclick = hide;
 
-    $('fbLogin').onsubmit = async e => {
+    $("fbLogin").onsubmit = async e => {
       e.preventDefault();
 
-      const email = $('fbEmail').value.trim();
-      const password = $('fbPass').value;
+      const email = $("fbEmail").value.trim();
+      const password = $("fbPass").value;
 
-      $('fbError').textContent = 'جارٍ التحقق...';
+      $("fbError").textContent = "جارٍ التحقق...";
 
       try {
         loginInProgress = true;
 
-        await signInWithEmailAndPassword(
+        await authAPI.signInWithEmailAndPassword(
           auth,
           email,
           password
         );
-
-        // The auth listener handles the welcome screen.
       } catch (err) {
         loginInProgress = false;
 
-        if ($('fbError')) {
-          $('fbError').textContent = message(err);
+        if ($("fbError")) {
+          $("fbError").textContent = message(err);
         }
       }
     };
   }
 
-  async function write(key, value, action) {
-    if (!editor()) {
-      throw Error('يجب تسجيل الدخول بصلاحية محرر');
-    }
+  /*
+   * Firestore write:
+   * Team: root administrator only
+   * Labs: administrator or editor
+   *
+   * Does not overwrite existing data automatically.
+   */
 
+  async function write(key, value, action) {
     const id = KEYS[key];
 
     if (!id) {
-      throw Error('مفتاح البيانات غير معروف');
+      throw new Error(
+        "مفتاح البيانات غير معروف"
+      );
     }
 
-    const ref = doc(db, 'dashboard', id);
+    if (!canEditDocument(id)) {
+      throw new Error(
+        "لا تمتلك صلاحية تعديل " + id
+      );
+    }
+
+    if (!firebaseReady) {
+      throw new Error(
+        "Firebase لم يكتمل تحميله"
+      );
+    }
+
+    const parsed =
+      typeof value === "string"
+        ? JSON.parse(value)
+        : value;
+
+    const {
+      doc,
+      runTransaction,
+      serverTimestamp,
+      addDoc,
+      collection
+    } = firestoreAPI;
+
+    const ref = doc(db, "dashboard", id);
 
     await runTransaction(db, async tx => {
-      const old = await tx.get(ref);
+      const previous = await tx.get(ref);
 
-      const revision = (
-        old.exists()
-          ? old.data().revision || 0
-          : 0
-      ) + 1;
+      const revision =
+        Number(
+          previous.exists()
+            ? previous.data().revision || 0
+            : 0
+        ) + 1;
 
       tx.set(ref, {
-        value: JSON.parse(value),
+        value: parsed,
         revision,
         updatedAt: serverTimestamp(),
         updatedBy: user.uid,
@@ -309,95 +578,64 @@
     });
 
     try {
-      await addDoc(collection(db, 'auditLogs'), {
-        action: action || 'تحديث البيانات',
-        document: id,
-        uid: user.uid,
-        name: displayName(),
-        email: user.email,
-        at: serverTimestamp()
-      });
+      await addDoc(
+        collection(db, "auditLogs"),
+        {
+          action: action || "تحديث البيانات",
+          document: id,
+          uid: user.uid,
+          name: displayName(),
+          email: user.email,
+          at: serverTimestamp()
+        }
+      );
     } catch (err) {
-      console.error('Audit log error:', err);
+      console.error(
+        "Audit log error:",
+        err
+      );
     }
+
+    try {
+      localStorage.setItem(
+        key,
+        JSON.stringify(parsed)
+      );
+    } catch (err) {
+      console.warn(err);
+    }
+
+    return true;
   }
 
-  window.centralLabSave = async (key, value, action) => {
-    try {
-      await write(key, value, action);
-
-      localStorage.setItem(key, value);
-
-      return true;
-    } catch (err) {
-      alert(
-        'لم يُحفظ التعديل في Firebase: ' +
-        message(err)
-      );
-
-      return false;
-    }
+  window.centralLabSave = async (
+    key,
+    value,
+    action
+  ) => {
+    // Reject failures so team.js cannot
+    // report a successful save incorrectly.
+    return write(key, value, action);
   };
 
-  window.centralLabRemove = async (key, action) => {
-    return window.centralLabSave(
+  window.centralLabRemove = async (
+    key,
+    action
+  ) => {
+    if (key === "centralLabTeamMembersV1") {
+      throw new Error(
+        "لا يمكن إعادة تعيين فريق العمل تلقائيًا"
+      );
+    }
+
+    return write(
       key,
       JSON.stringify(window.__LAB_DATA__),
-      action
+      action || "استعادة البيانات"
     );
   };
 
-  // Firebase synchronization without automatic page reload.
-  function subscribe() {
-    unsubs.forEach(unsubscribe => unsubscribe());
-    unsubs = [];
-
-    if (!user) return;
-
-    Object.entries(KEYS).forEach(([key, id]) => {
-      const unsubscribe = onSnapshot(
-        doc(db, 'dashboard', id),
-
-        snap => {
-          if (!snap.exists()) return;
-
-          const data = snap.data();
-
-          if (!Object.prototype.hasOwnProperty.call(
-            data,
-            'value'
-          )) {
-            return;
-          }
-
-          const json = JSON.stringify(data.value);
-          const old = localStorage.getItem(key);
-
-          if (json === old) return;
-
-          localStorage.setItem(key, json);
-
-          console.info(
-            'Firebase data synchronized:',
-            id
-          );
-
-          // No location.reload() here.
-          // Updated data will appear after a manual refresh
-          // unless the application supports live rendering.
-        },
-
-        err => {
-          console.error(
-            'Firebase synchronization error:',
-            err
-          );
-        }
-      );
-
-      unsubs.push(unsubscribe);
-    });
-  }
+  // Admin management interface.
 
   async function manage() {
     if (!admin()) return;
@@ -406,7 +644,10 @@
       <div class="admin-top">
         <h2>إدارة النظام</h2>
 
-        <button id="fbClose" type="button">
+        <button
+          id="fbClose"
+          type="button"
+        >
           إغلاق
         </button>
       </div>
@@ -440,13 +681,13 @@
       <div id="fbContent"></div>
     `);
 
-    $('fbClose').onclick = hide;
-    $('fbUsers').onclick = renderUsers;
-    $('fbLogs').onclick = renderLogs;
+    $("fbClose").onclick = hide;
+    $("fbUsers").onclick = renderUsers;
+    $("fbLogs").onclick = renderLogs;
 
-    $('fbLogout').onclick = async () => {
+    $("fbLogout").onclick = async () => {
       try {
-        await signOut(auth);
+        await authAPI.signOut(auth);
         hide();
       } catch (err) {
         alert(message(err));
@@ -459,8 +700,7 @@
   async function renderUsers() {
     if (!admin()) return;
 
-    const el = $('fbContent');
-
+    const el = $("fbContent");
     if (!el) return;
 
     el.innerHTML = `
@@ -510,101 +750,113 @@
       <div id="fbUserList"></div>
     `;
 
-    $('fbAdd').onsubmit = async e => {
+    $("fbAdd").onsubmit = async e => {
       e.preventDefault();
 
-      const name = $('fbName').value.trim();
-      const email = $('fbNewEmail').value.trim();
-      const pass = $('fbNewPass').value;
-      const role = $('fbRole').value;
+      const name = $("fbName").value.trim();
+      const email = $("fbNewEmail").value.trim();
+      const pass = $("fbNewPass").value;
+      const role = $("fbRole").value;
 
-      const status = $('fbAddError');
+      const status = $("fbAddError");
 
       let secondary = null;
 
       try {
-        if (status) {
-          status.textContent = 'جارٍ إنشاء الحساب...';
-        }
+        status.textContent =
+          "جارٍ إنشاء الحساب...";
 
-        secondary = initializeApp(
+        secondary = appAPI.initializeApp(
           config,
-          'central-lab-user-provisioning'
+          "central-lab-user-provisioning"
         );
 
-        const secondaryAuth = getAuth(secondary);
+        const secondaryAuth =
+          authAPI.getAuth(secondary);
 
-        const cred =
-          await createUserWithEmailAndPassword(
+        const credential =
+          await authAPI.createUserWithEmailAndPassword(
             secondaryAuth,
             email,
             pass
           );
 
-        await setDoc(
-          doc(db, 'users', cred.user.uid),
+        await firestoreAPI.setDoc(
+          firestoreAPI.doc(
+            db,
+            "users",
+            credential.user.uid
+          ),
           {
             name,
             email,
             role,
-            createdAt: serverTimestamp(),
+            createdAt:
+              firestoreAPI.serverTimestamp(),
             createdBy: ROOT
           }
         );
 
-        await signOut(secondaryAuth);
+        await authAPI.signOut(
+          secondaryAuth
+        );
 
-        if (status) {
-          status.textContent = 'تم إنشاء الحساب بنجاح';
+        if (status.isConnected) {
+          status.textContent =
+            "تم إنشاء الحساب بنجاح";
         }
 
         await renderUsers();
+
       } catch (err) {
-        if (status && status.isConnected) {
+        if (status.isConnected) {
           status.textContent = message(err);
         } else {
           alert(message(err));
         }
+
       } finally {
         if (secondary) {
-          await deleteApp(secondary).catch(
-            console.error
-          );
+          await appAPI.deleteApp(
+            secondary
+          ).catch(console.error);
         }
       }
     };
 
     try {
-      const snap = await getDocs(
-        collection(db, 'users')
-      );
+      const snapshot =
+        await firestoreAPI.getDocs(
+          firestoreAPI.collection(
+            db,
+            "users"
+          )
+        );
 
-      const list = $('fbUserList');
-
+      const list = $("fbUserList");
       if (!list) return;
 
       list.innerHTML =
-        '<h3>الحسابات</h3>' +
-        snap.docs.map(d => `
-          <div class="admin-item">
-            <b>
-              ${esc(
-                d.data().name ||
-                d.data().email
-              )}
-            </b>
+        "<h3>الحسابات</h3>" +
+        snapshot.docs.map(d => {
+          const x = d.data();
 
-            <small>
-              ${esc(
-                d.data().role || 'viewer'
-              )}
-            </small>
-          </div>
-        `).join('');
+          return `
+            <div class="admin-item">
+              <b>
+                ${esc(x.name || x.email)}
+              </b>
+
+              <small>
+                ${esc(x.role || "viewer")}
+              </small>
+            </div>
+          `;
+        }).join("");
 
     } catch (err) {
-      if ($('fbUserList')) {
-        $('fbUserList').textContent =
+      if ($("fbUserList")) {
+        $("fbUserList").textContent =
           message(err);
       }
     }
@@ -613,8 +865,7 @@
   async function renderLogs() {
     if (!admin()) return;
 
-    const el = $('fbContent');
-
+    const el = $("fbContent");
     if (!el) return;
 
     el.innerHTML = `
@@ -630,25 +881,32 @@
     `;
 
     try {
-      const snap = await getDocs(
-        query(
-          collection(db, 'auditLogs'),
-          orderBy('at', 'desc'),
-          limit(200)
-        )
-      );
+      const snapshot =
+        await firestoreAPI.getDocs(
+          firestoreAPI.query(
+            firestoreAPI.collection(
+              db,
+              "auditLogs"
+            ),
+            firestoreAPI.orderBy(
+              "at",
+              "desc"
+            ),
+            firestoreAPI.limit(200)
+          )
+        );
 
-      const list = $('fbLogList');
-
+      const list = $("fbLogList");
       if (!list) return;
 
       list.innerHTML =
-        snap.docs.map(d => {
+        snapshot.docs.map(d => {
           const x = d.data();
 
-          const date = x.at?.toDate?.()
-            ?.toLocaleString('ar-SA') ||
-            'قيد الحفظ';
+          const date =
+            x.at?.toDate?.()
+              ?.toLocaleString("ar-SA") ||
+            "قيد الحفظ";
 
           return `
             <div class="admin-item">
@@ -662,33 +920,41 @@
               </div>
             </div>
           `;
-        }).join('') ||
-        'لا توجد سجلات';
+        }).join("") ||
+        "لا توجد سجلات";
 
     } catch (err) {
-      if ($('fbLogList')) {
-        $('fbLogList').textContent =
+      if ($("fbLogList")) {
+        $("fbLogList").textContent =
           message(err);
       }
     }
   }
 
-  // Create one admin entry button only.
-  let entry = $('adminEntry');
+  // Single admin entry button.
+
+  let entry = $("adminEntry");
 
   if (!entry) {
-    entry = document.createElement('button');
-    entry.id = 'adminEntry';
-    entry.className = 'admin-entry';
-    entry.type = 'button';
-    entry.textContent = '🔐 Admin';
+    entry = document.createElement("button");
+    entry.id = "adminEntry";
+    entry.className = "admin-entry";
+    entry.type = "button";
+    entry.textContent = "🔐 Admin";
 
-    document
-      .querySelector('.view-group')
-      ?.append(entry);
+    document.querySelector(
+      ".view-group"
+    )?.append(entry);
   }
 
   entry.onclick = () => {
+    if (!firebaseReady) {
+      alert(
+        "يرجى انتظار اكتمال اتصال Firebase"
+      );
+      return;
+    }
+
     if (!user) {
       login();
       return;
@@ -710,7 +976,7 @@
       <p>
         الصلاحية:
         <b>
-          ${editor() ? 'محرر' : 'مشاهد'}
+          ${editor() ? "محرر" : "مشاهد"}
         </b>
       </p>
 
@@ -733,100 +999,50 @@
       </div>
     `);
 
-    $('fbCloseAccount').onclick = hide;
+    $("fbCloseAccount").onclick = hide;
 
-    $('fbAccountLogout').onclick = async () => {
-      await signOut(auth);
-      hide();
-    };
+    $("fbAccountLogout").onclick =
+      async () => {
+        await authAPI.signOut(auth);
+        hide();
+      };
   };
 
-  // Authentication listener.
-  onAuthStateChanged(auth, async u => {
-    const version = ++authVersion;
-    const previousUid = user?.uid || null;
+  // Protect editing from unauthorized UI actions.
+  // Firestore Security Rules must independently
+  // enforce these permissions.
 
-    user = u;
-    profile = null;
-
-    if (!u) {
-      loginInProgress = false;
-
-      sessionStorage.removeItem(WELCOME_KEY);
-
-      unsubs.forEach(fn => fn());
-      unsubs = [];
-
-      updateButtons();
-
-      return;
-    }
-
-    if (
-      previousUid &&
-      previousUid !== u.uid
-    ) {
-      sessionStorage.removeItem(WELCOME_KEY);
-    }
-
-    if (!admin()) {
-      try {
-        const s = await getDoc(
-          doc(db, 'users', u.uid)
-        );
-
-        if (version !== authVersion) return;
-
-        profile = s.exists()
-          ? s.data()
-          : null;
-
-      } catch (err) {
-        console.error(
-          'User profile error:',
-          err
-        );
-      }
-    } else {
-      profile = {
-        name: 'د. خليل السعيد',
-        role: 'admin'
-      };
-    }
-
-    if (version !== authVersion) return;
-
-    subscribe();
-    updateButtons();
-
-    // Do not show welcome when Firebase restores a session.
-    // Show it only after an explicit successful login.
-    if (loginInProgress) {
-      loginInProgress = false;
-      welcome();
-    }
-  });
-
-  // Protect editing actions.
   document.addEventListener(
-    'click',
+    "click",
     e => {
       const target = e.target.closest(
-        '#editBtn,#teamAdd,' +
-        '#teamCards [data-edit],' +
-        '#teamCards [data-delete],' +
-        '#save,#reset'
+        "#editBtn,#teamAdd," +
+        "#teamCards [data-edit]," +
+        "#teamCards [data-delete]," +
+        "#save,#reset"
       );
 
-      if (target && !editor()) {
+      if (!target) return;
+
+      const isTeamAction =
+        !!target.closest(
+          "#teamAdd,#teamCards [data-edit]," +
+          "#teamCards [data-delete]"
+        );
+
+      const allowed = isTeamAction
+        ? admin()
+        : editor();
+
+      if (!allowed) {
         e.preventDefault();
         e.stopImmediatePropagation();
 
-        if (!user) {
+        if (!user && firebaseReady) {
           login();
         } else {
           alert(
-            'لا تمتلك صلاحية تعديل البيانات'
+            "لا تمتلك صلاحية تعديل البيانات"
           );
         }
       }
@@ -835,25 +1051,183 @@
   );
 
   document.addEventListener(
-    'submit',
+    "submit",
     e => {
       if (
-        e.target.id === 'teamForm' &&
-        !editor()
+        e.target.id === "teamForm" &&
+        !admin()
       ) {
         e.preventDefault();
         e.stopImmediatePropagation();
 
-        if (!user) {
+        if (!user && firebaseReady) {
           login();
         } else {
           alert(
-            'لا تمتلك صلاحية تعديل بيانات الفريق'
+            "تعديل فريق العمل متاح للمدير فقط"
           );
         }
       }
     },
     true
   );
+
+  // Load Firebase SDK.
+
+  try {
+    const [
+      firebaseApp,
+      firebaseAuth,
+      firebaseFirestore
+    ] = await Promise.all([
+      import(
+        "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js"
+      ),
+      import(
+        "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js"
+      ),
+      import(
+        "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js"
+      )
+    ]);
+
+    appAPI = firebaseApp;
+    authAPI = firebaseAuth;
+    firestoreAPI = firebaseFirestore;
+
+    const app =
+      firebaseApp.initializeApp(config);
+
+    auth = firebaseAuth.getAuth(app);
+
+    db = firebaseFirestore.getFirestore(app);
+
+    firebaseReady = true;
+
+    console.info(
+      "Central Laboratory Firebase initialized"
+    );
+
+    // Public team synchronization starts immediately,
+    // without waiting for login.
+
+    startPublicSynchronization();
+
+    // Start any subscriptions registered before
+    // Firebase finished loading.
+
+    for (const id of callbacks.keys()) {
+      startListener(id);
+    }
+
+    firebaseAuth.onAuthStateChanged(
+      auth,
+      async currentUser => {
+        const version = ++authVersion;
+        const previousUid = user?.uid || null;
+
+        user = currentUser;
+        profile = null;
+
+        if (!currentUser) {
+          loginInProgress = false;
+
+          sessionStorage.removeItem(
+            WELCOME_KEY
+          );
+
+          if (listeners.has("labs")) {
+            listeners.get("labs")();
+            listeners.delete("labs");
+          }
+
+          snapshots.delete("labs");
+
+          updateButtons();
+          return;
+        }
+
+        if (
+          previousUid &&
+          previousUid !== currentUser.uid
+        ) {
+          sessionStorage.removeItem(
+            WELCOME_KEY
+          );
+        }
+
+        if (!admin()) {
+          try {
+            const snapshot =
+              await firebaseFirestore.getDoc(
+                firebaseFirestore.doc(
+                  db,
+                  "users",
+                  currentUser.uid
+                )
+              );
+
+            if (version !== authVersion) {
+              return;
+            }
+
+            profile = snapshot.exists()
+              ? snapshot.data()
+              : null;
+
+          } catch (err) {
+            console.error(
+              "User profile error:",
+              err
+            );
+          }
+
+        } else {
+          profile = {
+            name: "د. خليل السعيد",
+            role: "admin"
+          };
+        }
+
+        if (version !== authVersion) {
+          return;
+        }
+
+        startPrivateSynchronization();
+
+        updateButtons();
+
+        // Show welcome only for explicit login.
+
+        if (loginInProgress) {
+          loginInProgress = false;
+          welcome();
+        }
+      }
+    );
+
+    updateButtons();
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "centralLabFirebaseReady"
+      )
+    );
+
+  } catch (error) {
+    console.error(
+      "Firebase initialization failed:",
+      error
+    );
+
+    window.dispatchEvent(
+      new CustomEvent(
+        "centralLabFirebaseError",
+        { detail: error.message }
+      )
+    );
+
+    notifyErrors("team", error);
+  }
 
 })();
